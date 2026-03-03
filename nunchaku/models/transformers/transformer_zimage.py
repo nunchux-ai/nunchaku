@@ -242,18 +242,7 @@ def _convert_z_image_ff(z_ff: ZImageFeedForward) -> FeedForward:
     # would allocate large temporary tensors and can dominate load time.
     target_dtype = z_ff.w1.weight.dtype
     target_device = z_ff.w1.weight.device
-    if target_device.type == "meta":
-        with torch.device("meta"):
-            converted_ff = FeedForward(
-                dim=z_ff.w1.in_features,
-                dim_out=z_ff.w2.out_features,
-                dropout=0.0,
-                activation_fn="swiglu",
-                inner_dim=z_ff.w2.in_features,
-                bias=False,
-            )
-        converted_ff = converted_ff.to(dtype=target_dtype, device=target_device)
-    else:
+    with torch.device(target_device):
         converted_ff = FeedForward(
             dim=z_ff.w1.in_features,
             dim_out=z_ff.w2.out_features,
@@ -261,7 +250,8 @@ def _convert_z_image_ff(z_ff: ZImageFeedForward) -> FeedForward:
             activation_fn="swiglu",
             inner_dim=z_ff.w2.in_features,
             bias=False,
-        ).to(dtype=target_dtype, device=target_device)
+        )
+    converted_ff = converted_ff.to(dtype=target_dtype)
     return converted_ff
 
 
@@ -398,13 +388,8 @@ class NunchakuZImageTransformer2DModel(ZImageTransformer2DModel, NunchakuModelLo
         AssertionError
             If the file is not a safetensors file.
         """
-        # NOTE:
-        # `kwargs` is forwarded into `_patch_model(...)`, and further into quantized layer constructors
-        # (e.g. `SVDQW4A4Linear.from_linear(..., **kwargs)`).
-        # Loader-only arguments like `device` / `offload` must NOT be forwarded,
-        # otherwise they can break layer construction (unexpected/duplicate kwargs).
-        device = kwargs.pop("device", "cpu")
-        offload = kwargs.pop("offload", False)
+        device = kwargs.get("device", "cpu")
+        offload = kwargs.get("offload", False)
 
         if offload:
             raise NotImplementedError("Offload is not supported for ZImageTransformer2DModel")
