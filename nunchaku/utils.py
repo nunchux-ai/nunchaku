@@ -44,7 +44,8 @@ def pad_tensor(tensor: torch.Tensor | None, multiples: int, dim: int, fill: Any 
     shape[dim] = ceil_divide(shape[dim], multiples) * multiples
     result = torch.empty(shape, dtype=tensor.dtype, device=tensor.device)
     result.fill_(fill)
-    result[[slice(0, extent) for extent in tensor.shape]] = tensor
+    indeces = tuple(slice(0, extent) for extent in tensor.shape)
+    result[indeces] = tensor
     return result
 
 
