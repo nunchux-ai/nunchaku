@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 import torch
 
-from nunchaku import NunchakuChromaTransformer2dModel
 from nunchaku.utils import get_gpu_memory, get_precision, is_turing
 
 from ...utils import already_generate, compute_lpips
@@ -81,6 +80,17 @@ def test_chroma1_hd(case: Case):
     if not torch.cuda.is_available():
         pytest.skip("CUDA is required for Chroma tests.")
 
+    # This test requires the compiled CUDA extension.
+    # Import it explicitly so we can skip with a clear message instead of failing test collection.
+    try:
+        import nunchaku._C  # noqa: F401
+    except Exception as e:
+        pytest.skip(
+            "nunchaku CUDA extension is not available (missing `nunchaku._C`). "
+            "Install a built wheel or build/install the project first. "
+            f"Underlying error: {type(e).__name__}: {e}"
+        )
+
     try:
         from diffusers import ChromaPipeline
     except Exception as e:
@@ -134,6 +144,8 @@ def test_chroma1_hd(case: Case):
         torch.cuda.empty_cache()
 
     # 2) Run with Nunchaku transformer.
+    from nunchaku.models.transformers.transformer_chroma import NunchakuChromaTransformer2dModel
+
     transformer = NunchakuChromaTransformer2dModel.from_pretrained(chroma_ckpt, torch_dtype=torch_dtype)
     pipe = ChromaPipeline.from_pretrained(chroma_model, transformer=transformer, torch_dtype=torch_dtype)
     try:
