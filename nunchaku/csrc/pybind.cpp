@@ -2,6 +2,7 @@
 #include "gemm88.h"
 #include "flux.h"
 #include "sana.h"
+#include "chroma_additive_attention_ops.h"
 #include "ops.h"
 #include "utils.h"
 #include <torch/extension.h>
@@ -111,6 +112,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def("attention_fp16", nunchaku::ops::attention_fp16)
         .def("gemm_awq", nunchaku::ops::gemm_awq)
         .def("gemv_awq", nunchaku::ops::gemv_awq)
+        .def("chroma_additive_attention_packed_fp16", nunchaku::ops::chroma_additive_attention_packed_fp16)
 
         .def("test_rmsnorm_rope", nunchaku::ops::test_rmsnorm_rope)
         .def("test_pack_qkv", nunchaku::ops::test_pack_qkv);

@@ -145,6 +145,7 @@ if __name__ == "__main__":
         name="nunchaku._C",
         sources=[
             "nunchaku/csrc/pybind.cpp",
+            "nunchaku/csrc/chroma_additive_attention_ops.cpp",
             "src/interop/torch.cpp",
             "src/activation.cpp",
             "src/layernorm.cpp",
@@ -177,6 +178,7 @@ if __name__ == "__main__":
             "src/kernels/zgemm/gemm_w4a4_launch_bf16_fp4.cu",
             "src/kernels/zgemm/gemm_w8a8.cu",
             "src/kernels/zgemm/attention.cu",
+            "src/kernels/zgemm/attention_rank1bias.cu",
             "src/kernels/dwconv.cu",
             "src/kernels/gemm_batched.cu",
             "src/kernels/gemm_f16.cu",
