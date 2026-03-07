@@ -218,3 +218,5 @@ dev/
 metrics.json
 *use_count.txt
 *use_record.txt
+/others/
+/test.py
