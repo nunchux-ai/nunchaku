@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from ...utils import already_generate, compute_lpips
-from ..utils import run_pipeline
+from tests.utils import already_generate, compute_lpips
+from tests.v1.utils import run_pipeline
 
 
 class Case:
