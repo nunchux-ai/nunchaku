@@ -39,6 +39,7 @@ public:
                           Tensor out_vk,         // linear     [B, num_heads, head_dim + 1, head_dim]
                           Tensor out_linearattn, // linear     [B, (M), N / 3]
                           bool act_unsigned,
+                          bool qout_act_unsigned,
                           std::vector<float> lora_scales, // [R / 16]
                           bool fuse_silu,
                           bool fp4,
@@ -54,6 +55,7 @@ public:
                                             Tensor lora_down,
                                             Tensor lora_act_out,
                                             Tensor smooth,
+                                            bool act_unsigned,
                                             bool fuse_glu,
                                             bool fp4);
     static void quantize_w4a4_act(Tensor input, Tensor output, Tensor oscales);

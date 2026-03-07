@@ -220,3 +220,5 @@ metrics.json
 *use_record.txt
 /others/
 /test.py
+test_chroma.py
+scripts/build_linux_wheel_cached.sh

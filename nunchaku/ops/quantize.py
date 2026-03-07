@@ -15,6 +15,7 @@ def svdq_quantize_w4a4_act_fuse_lora_cuda(
     lora_down: torch.Tensor | None = None,
     lora_act_out: torch.Tensor | None = None,
     smooth: torch.Tensor | None = None,
+    act_unsigned: bool = False,
     fuse_glu: bool = False,
     fp4: bool = False,
     pad_size: int = 256,
@@ -36,6 +37,9 @@ def svdq_quantize_w4a4_act_fuse_lora_cuda(
         Packed output tensor for LoRA activations. Allocated if None.
     smooth : torch.Tensor or None, optional, dtype bfloat16/float16
         Smoothing factor for quantization.
+    act_unsigned : bool, default=False
+        If True, quantize INT4 activations as unsigned. This should match how the
+        packed activations will be consumed by the downstream GEMM.
     fuse_glu : bool, default=False
         If True, fuse GLU activation.
     fp4 : bool, default=False
@@ -77,5 +81,7 @@ def svdq_quantize_w4a4_act_fuse_lora_cuda(
     if lora_act_out is None:
         lora_act_out = torch.empty(batch_size_pad, rank, dtype=torch.float32, device=input.device)
 
-    ops.quantize_w4a4_act_fuse_lora(input, output, oscales, lora_down, lora_act_out, smooth, fuse_glu, fp4)
+    ops.quantize_w4a4_act_fuse_lora(
+        input, output, oscales, lora_down, lora_act_out, smooth, act_unsigned, fuse_glu, fp4
+    )
     return output, oscales, lora_act_out

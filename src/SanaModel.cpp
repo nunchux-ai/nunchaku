@@ -70,6 +70,7 @@ Tensor SanaLinearAttention::forward(Tensor x, Tensor out) {
                        vk,
                        q,
                        qact.is_unsigned,
+                       false,
                        qkv_proj.lora_scales,
                        false,
                        qkv_proj.use_fp4,

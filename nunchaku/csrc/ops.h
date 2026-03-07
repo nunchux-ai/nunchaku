@@ -27,6 +27,7 @@ void gemm_w4a4(std::optional<torch::Tensor> act,            // packed act [M, K 
                std::optional<torch::Tensor> out_vk,         // linear     [B, num_heads, head_dim + 1, head_dim]
                std::optional<torch::Tensor> out_linearattn, // linear     [B, (M), N / 3]
                bool act_unsigned,
+               bool qout_act_unsigned,
                std::vector<float> lora_scales,
                bool fuse_silu,
                bool fp4,
@@ -68,6 +69,7 @@ void gemm_w4a4(std::optional<torch::Tensor> act,            // packed act [M, K 
                                  getTensor(out_vk),
                                  getTensor(out_linearattn),
                                  act_unsigned,
+                                 qout_act_unsigned,
                                  lora_scales,
                                  fuse_silu,
                                  fp4,
@@ -86,6 +88,7 @@ void quantize_w4a4_act_fuse_lora(std::optional<torch::Tensor> input,
                                  std::optional<torch::Tensor> lora_down,
                                  std::optional<torch::Tensor> lora_act_out,
                                  std::optional<torch::Tensor> smooth,
+                                 bool act_unsigned,
                                  bool fuse_glu,
                                  bool fp4) {
     TorchOpContext ctx;
@@ -107,6 +110,7 @@ void quantize_w4a4_act_fuse_lora(std::optional<torch::Tensor> input,
                                                    getTensor(lora_down),
                                                    getTensor(lora_act_out),
                                                    getTensor(smooth),
+                                                   act_unsigned,
                                                    fuse_glu,
                                                    fp4);
 }

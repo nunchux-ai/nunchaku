@@ -1094,7 +1094,7 @@ public:
         }
     };
 
-    template<bool fuse_glu, bool use_fp4>
+    template<bool fuse_glu, bool use_unsigned, bool use_fp4>
     struct quantize_w4a4_fuse_lora_kernel {
         using oscales_t = typename std::conditional_t<use_fp4, packed_amscale_t, packed_ascale_t>;
 
@@ -1170,16 +1170,19 @@ public:
                                    .alwaysfalse   = args.alwaysfalse,
                                });
 
-            EpilogueQuantize<false, false, use_fp4>()(
+            static constexpr float SHIFT_GELU = 0.171875f;
+            EpilogueQuantize<false, use_unsigned, use_fp4>()(
                 binfo,
                 fpsum,
                 args.M,
                 args.N,
                 0,
-                typename EpilogueQuantize<false, false, use_fp4>::Arguments{.qout          = args.output,
-                                                                            .oscales       = args.oscales,
-                                                                            .shift_value   = 0,
-                                                                            .smooth_factor = args.smooth_factor});
+                typename EpilogueQuantize<false, use_unsigned, use_fp4>::Arguments{
+                    .qout = args.output,
+                    .oscales = args.oscales,
+                    .shift_value = use_fp4 ? 0.0f : (use_unsigned ? SHIFT_GELU : 0.0f),
+                    .smooth_factor = args.smooth_factor,
+                });
         }
     };
 };

@@ -30,6 +30,7 @@ def svdq_gemm_w4a4_cuda(
     out_vk: torch.Tensor | None = None,
     out_linearattn: torch.Tensor | None = None,
     act_unsigned: bool = False,
+    qout_act_unsigned: bool | None = None,
     lora_scales: list[float] | None = None,
     fuse_silu: bool = False,
     fp4: bool = False,
@@ -85,6 +86,10 @@ def svdq_gemm_w4a4_cuda(
         Used only in SANA. Leave as None.
     act_unsigned : bool, default=False
         If True, activations are unsigned (e.g., after GeLU, shifted by 0.171875). This is only used for INT4 to enable unsigned INT4 activation quantization for better quantization quality.
+    qout_act_unsigned : bool or None, optional
+        Controls how `qout` is quantized when this GEMM fuses the next layer's
+        activation quantization. If None, preserve the legacy behavior:
+        INT4 fused qout is unsigned, NVFP4 fused qout is not.
     lora_scales : list of float or None, optional
         Per-group LoRA scaling factors (16 channels per group). Defaults to 1.0 per group.
     fuse_silu : bool, default=False
@@ -127,6 +132,8 @@ def svdq_gemm_w4a4_cuda(
         lora_scales = [1.0] * math.ceil(rank / 16)
     if alpha is None:
         alpha = 1.0
+    if qout_act_unsigned is None:
+        qout_act_unsigned = qout is not None and oscales is not None and not fp4
     ops.gemm_w4a4(
         act,
         wgt,
@@ -148,6 +155,7 @@ def svdq_gemm_w4a4_cuda(
         out_vk,
         out_linearattn,
         act_unsigned,
+        qout_act_unsigned,
         lora_scales,
         fuse_silu,
         fp4,

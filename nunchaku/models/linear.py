@@ -213,7 +213,12 @@ class SVDQW4A4Linear(nn.Module):
         N: batch size
         """
         quantized_x, ascales, lora_act_out = svdq_quantize_w4a4_act_fuse_lora_cuda(
-            x, lora_down=self.proj_down, smooth=self.smooth_factor, fp4=self.precision == "nvfp4", pad_size=pad_size
+            x,
+            lora_down=self.proj_down,
+            smooth=self.smooth_factor,
+            act_unsigned=self.act_unsigned,
+            fp4=self.precision == "nvfp4",
+            pad_size=pad_size,
         )
         return quantized_x, ascales, lora_act_out
 

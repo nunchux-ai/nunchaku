@@ -25,6 +25,7 @@ void gemm_w4a4(Tensor act,            // packed act [M, K / 2]
                Tensor out_vk,         // linear     [B, num_heads, head_dim + 1, head_dim]
                Tensor out_linearattn, // linear     [B, (M), N / 3]
                bool act_unsigned,
+               bool qout_act_unsigned,
                std::vector<float> lora_scales, // [R / 16]
                bool fuse_silu,
                bool fp4,
@@ -42,6 +43,7 @@ void quantize_w4a4_act_fuse_lora(Tensor input,
                                  Tensor lora_down,
                                  Tensor lora_act_out,
                                  Tensor smooth = {},
+                                 bool act_unsigned = false,
                                  bool fuse_glu = false,
                                  bool fp4      = false);
 void quantize_w4a4_act(Tensor input, Tensor output, Tensor oscales);

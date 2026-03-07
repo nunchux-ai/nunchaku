@@ -51,6 +51,7 @@ void gemm_w4a4(Tensor act,            // packed act [M, K / 2]
                Tensor out_vk,         // linear     [B, num_heads, head_dim + 1, head_dim]
                Tensor out_linearattn, // linear     [B, (M), N / 3]
                bool act_unsigned,
+               bool qout_act_unsigned,
                std::vector<float> lora_scales, // [R / 16]
                bool fuse_silu,
                bool fp4,
@@ -92,6 +93,7 @@ void gemm_w4a4(Tensor act,            // packed act [M, K / 2]
                                                      out_vk,
                                                      out_linearattn,
                                                      act_unsigned,
+                                                     qout_act_unsigned,
                                                      lora_scales,
                                                      fuse_silu,
                                                      fp4,
@@ -116,11 +118,12 @@ void quantize_w4a4_act_fuse_lora(Tensor input,
                                  Tensor lora_down,
                                  Tensor lora_act_out,
                                  Tensor smooth,
+                                 bool act_unsigned,
                                  bool fuse_glu,
                                  bool fp4) {
     invoke_launch(input.dtype(), fp4, false, [&]<typename Config, bool USE_FP4>() {
         GEMM_W4A4_Launch<Config, USE_FP4>::quantize_w4a4_act_fuse_lora(
-            input, output, oscales, lora_down, lora_act_out, smooth, fuse_glu, fp4);
+            input, output, oscales, lora_down, lora_act_out, smooth, act_unsigned, fuse_glu, fp4);
     });
 }
 

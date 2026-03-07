@@ -70,6 +70,7 @@ def fused_gelu_mlp(x: torch.Tensor, fc1: SVDQW4A4Linear, fc2: SVDQW4A4Linear, pa
         lora_act_out=qout_lora_act,
         bias=fc1.bias,
         smooth_factor=fc2.smooth_factor,
+        qout_act_unsigned=fc2.act_unsigned,
         fp4=fc1.precision == "nvfp4",
         alpha=fc1.wtscale,
         wcscales=fc1.wcscales,
