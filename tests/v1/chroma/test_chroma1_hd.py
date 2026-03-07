@@ -5,14 +5,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from nunchaku.utils import get_gpu_memory, get_precision, is_turing
-
 from ...utils import already_generate, compute_lpips
 from ..utils import run_pipeline
-
-precision = get_precision()
-torch_dtype = torch.float16 if is_turing() else torch.bfloat16
-dtype_str = "fp16" if torch_dtype == torch.float16 else "bf16"
 
 
 class Case:
@@ -55,17 +49,7 @@ class Case:
             "int4-fp16": 0.50,
             "fp4-fp16": 0.45,
         }
-
-        ref_root = os.environ.get("NUNCHAKU_TEST_CACHE_ROOT", os.path.join("test_results", "ref"))
-        folder_name = f"w{width}h{height}t{num_inference_steps}g{guidance_scale}"
-        self.save_dir_16bit = Path(ref_root) / model_name / dtype_str / folder_name
-        self.save_dir_nunchaku = (
-            Path("test_results")
-            / "nunchaku"
-            / model_name
-            / f"{precision}-{dtype_str}"
-            / f"{folder_name}-bs{batch_size}"
-        )
+        self.folder_name = f"w{width}h{height}t{num_inference_steps}g{guidance_scale}"
 
         self.forward_kwargs = {
             "width": width,
@@ -73,6 +57,27 @@ class Case:
             "num_inference_steps": num_inference_steps,
             "guidance_scale": guidance_scale,
         }
+
+    def get_save_dirs(self, precision: str, dtype_str: str) -> tuple[Path, Path]:
+        ref_root = os.environ.get("NUNCHAKU_TEST_CACHE_ROOT", os.path.join("test_results", "ref"))
+        save_dir_16bit = Path(ref_root) / self.model_name / dtype_str / self.folder_name
+        save_dir_nunchaku = (
+            Path("test_results")
+            / "nunchaku"
+            / self.model_name
+            / f"{precision}-{dtype_str}"
+            / f"{self.folder_name}-bs{self.batch_size}"
+        )
+        return save_dir_16bit, save_dir_nunchaku
+
+
+def _get_runtime_config() -> tuple[str, torch.dtype, str]:
+    from nunchaku.utils import get_precision, is_turing
+
+    precision = get_precision()
+    torch_dtype = torch.float16 if is_turing() else torch.bfloat16
+    dtype_str = "fp16" if torch_dtype == torch.float16 else "bf16"
+    return precision, torch_dtype, dtype_str
 
 
 @pytest.mark.parametrize("case", [pytest.param(Case(), id="chroma1-hd")])
@@ -95,6 +100,11 @@ def test_chroma1_hd(case: Case):
         from diffusers import ChromaPipeline
     except Exception as e:
         pytest.skip(f"diffusers.ChromaPipeline is unavailable: {type(e).__name__}: {e}")
+
+    from nunchaku.utils import get_gpu_memory
+
+    precision, torch_dtype, dtype_str = _get_runtime_config()
+    save_dir_16bit, save_dir_nunchaku = case.get_save_dirs(precision, dtype_str)
 
     # Local dir or HF repo_id for diffusers model.
     chroma_model = os.environ.get("NUNCHAKU_CHROMA_MODEL", "").strip()
@@ -123,7 +133,7 @@ def test_chroma1_hd(case: Case):
     ]
 
     # 1) Generate (and cache) 16-bit reference images.
-    if not already_generate(case.save_dir_16bit, len(dataset)):
+    if not already_generate(save_dir_16bit, len(dataset)):
         pipe_ref = ChromaPipeline.from_pretrained(chroma_model, torch_dtype=torch_dtype)
         try:
             if get_gpu_memory() > 25:
@@ -136,7 +146,7 @@ def test_chroma1_hd(case: Case):
             dataset=dataset,
             batch_size=case.batch_size,
             pipeline=pipe_ref,
-            save_dir=case.save_dir_16bit,
+            save_dir=save_dir_16bit,
             forward_kwargs=case.forward_kwargs,
         )
         del pipe_ref
@@ -160,7 +170,7 @@ def test_chroma1_hd(case: Case):
         dataset=dataset,
         batch_size=case.batch_size,
         pipeline=pipe,
-        save_dir=case.save_dir_nunchaku,
+        save_dir=save_dir_nunchaku,
         forward_kwargs=case.forward_kwargs,
     )
     del transformer
@@ -169,7 +179,7 @@ def test_chroma1_hd(case: Case):
     torch.cuda.empty_cache()
 
     # 3) Quality check vs reference.
-    lpips = compute_lpips(case.save_dir_16bit, case.save_dir_nunchaku, batch_size=1)
+    lpips = compute_lpips(save_dir_16bit, save_dir_nunchaku, batch_size=1)
     print(f"lpips: {lpips}")
     key = f"{precision}-{dtype_str}"
     max_lpips = case.expected_lpips.get(key)
