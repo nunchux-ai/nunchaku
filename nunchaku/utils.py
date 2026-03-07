@@ -308,7 +308,7 @@ def check_hardware_compatibility(quantization_config: dict, device: str | torch.
     if sm in ["120", "121"]:  # you can only use the fp4 models
         if quantization_config["weight"]["dtype"] != "fp4_e2m1_all":
             raise ValueError('Please use "fp4" quantization for Blackwell GPUs. ')
-    elif sm in ["75", "80", "86", "89"]:
+    elif sm in ["75", "80", "86", "89", "90"]:
         if quantization_config["weight"]["dtype"] != "int4":
             raise ValueError('Please use "int4" quantization for Turing, Ampere and Ada GPUs. ')
     else:
