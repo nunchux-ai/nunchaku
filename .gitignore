@@ -222,3 +222,5 @@ metrics.json
 /test.py
 test_chroma.py
 scripts/build_linux_wheel_cached.sh
+scripts/check_chroma_nunchaku_linear_parity.py
+scripts/probe_chroma_b2_cpp_path.py

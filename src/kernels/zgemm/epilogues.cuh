@@ -520,6 +520,10 @@ public:
             const int numBlocksQ = binfo.numBlocksN / 3;
             const bool is_q      = bn < numBlocksQ;
             const bool is_k      = !is_q && bn < numBlocksQ * 2;
+            const int num_heads  = numBlocksQ;
+            const int num_blocks_per_batch = (args.actualM + BLOCK_M - 1) / BLOCK_M;
+            const int batch_id            = bm / num_blocks_per_batch;
+            const int bm_local            = bm - batch_id * num_blocks_per_batch;
 
             // bn is head_id (assume HEAD_DIM == WARP_N)
             int head_id, strideHead;
@@ -534,8 +538,10 @@ public:
                 strideHead = args.strideHead_v;
             }
 
-            int block_offset = head_id * strideHead + bm * NUM_WARPS * WARP_M_TILES * WARP_N_TILES * WARP_SIZE;
-            int maxRows      = args.actualM - bm * BLOCK_M;
+            int block_offset =
+                (batch_id * num_heads + head_id) * strideHead +
+                bm_local * NUM_WARPS * WARP_M_TILES * WARP_N_TILES * WARP_SIZE;
+            int maxRows = args.actualM - bm_local * BLOCK_M;
 
             // static constexpr float neginf = -std::numeric_limits<float>::infinity();
 
