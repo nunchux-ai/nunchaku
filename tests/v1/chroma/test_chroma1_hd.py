@@ -1,5 +1,6 @@
 import gc
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -7,8 +8,12 @@ import torch
 
 from nunchaku.utils import get_gpu_memory, get_precision, is_turing
 
-from ...utils import already_generate, compute_lpips
-from ..utils import run_pipeline
+TESTS_DIR = Path(__file__).resolve().parents[2]
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
+
+from utils import already_generate, compute_lpips
+from v1.utils import run_pipeline
 
 precision = get_precision()
 torch_dtype = torch.float16 if is_turing() else torch.bfloat16
