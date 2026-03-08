@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -13,17 +12,16 @@ from diffusers.models.modeling_utils import ModelMixin
 from torch import nn
 
 
-# C++ additive attention (rank-1 bias mask) is enabled by default.
-# Set `NUNCHAKU_CHROMA_USE_CPP_ADDITIVE_ATTN=0` to force the Python/SDPA path.
-_CPP_ADDITIVE_ATTN_DEFAULT = "1"
-_CPP_ADDITIVE_ATTN_FALLBACK_LOGGED = False
+# Keep the C++ additive-attention exception log one-shot to avoid
+# repeating the same fallback message for every transformer block.
+_CPP_ADDITIVE_ATTN_EXCEPTION_LOGGED = False
 
 
-def _log_cpp_additive_attn_fallback(reason: str):
-    global _CPP_ADDITIVE_ATTN_FALLBACK_LOGGED
-    if _CPP_ADDITIVE_ATTN_FALLBACK_LOGGED:
+def _log_cpp_additive_attn_exception(reason: str):
+    global _CPP_ADDITIVE_ATTN_EXCEPTION_LOGGED
+    if _CPP_ADDITIVE_ATTN_EXCEPTION_LOGGED:
         return
-    _CPP_ADDITIVE_ATTN_FALLBACK_LOGGED = True
+    _CPP_ADDITIVE_ATTN_EXCEPTION_LOGGED = True
     print(f"[nunchaku.chroma] cpp_additive_attn fallback: {reason}")
 
 
@@ -89,24 +87,130 @@ def _build_attn_norms(*, head_dim: int, eps: float, with_added: bool, device, dt
     return m
 
 
-def _dispatch_attention(
-    query,
-    key,
-    value,
-    attention_mask,
+def _should_use_cpp_additive_attn(*, attention_mask_1d, hidden_states, head_dim: int) -> bool:
+    return attention_mask_1d is not None and hidden_states.is_cuda and int(head_dim) == 128
+
+
+def _pad_to_multiple(n: int, multiple: int) -> int:
+    return int(math.ceil(n / multiple) * multiple)
+
+
+def _get_or_create_cpp_workspace(
+    owner,
+    cache_attr: str,
     *,
-    txt_tokens: int | None = None,
-    valid_txt: int | None = None,
+    batch_size: int,
+    num_tokens_pad: int,
+    heads: int,
+    head_dim: int,
+    device,
+    out_dtype,
 ):
+    key = (batch_size, num_tokens_pad, heads, head_dim, str(device), out_dtype)
+    ws = getattr(owner, cache_attr, None)
+    if ws is None or ws.get("key") != key:
+        ws = {
+            "key": key,
+            "q": torch.empty((batch_size, heads, num_tokens_pad, head_dim), device=device, dtype=torch.float16),
+            "k": torch.empty((batch_size, heads, num_tokens_pad, head_dim), device=device, dtype=torch.float16),
+            "v": torch.empty((batch_size, heads, num_tokens_pad, head_dim), device=device, dtype=torch.float16),
+            "m": torch.empty((batch_size, num_tokens_pad), device=device, dtype=torch.float16),
+            "out": torch.empty((batch_size, num_tokens_pad, heads * head_dim), device=device, dtype=out_dtype),
+        }
+        setattr(owner, cache_attr, ws)
+    return ws
+
+
+def _get_cpp_workspace_tensors(cpp_workspace: dict):
+    return (
+        cpp_workspace["q"],
+        cpp_workspace["k"],
+        cpp_workspace["v"],
+        cpp_workspace["m"],
+        cpp_workspace["out"],
+    )
+
+
+def _run_cpp_additive_attention(q, k, v, mask, out, *, context: str) -> bool:
+    try:
+        from nunchaku._C.ops import chroma_additive_attention_packed_fp16
+
+        chroma_additive_attention_packed_fp16(q, k, v, mask, out, 0.0)
+        return True
+    except Exception as e:
+        _log_cpp_additive_attn_exception(f"exception in {context}: {type(e).__name__}: {e}")
+        return False
+
+
+def _fused_qkv_heads(hidden_states, qkv_proj, norm_q, norm_k, rotary_emb, heads: int):
+    from nunchaku.ops.fused import fused_qkv_norm_rottary
+
+    qkv = fused_qkv_norm_rottary(hidden_states, qkv_proj, norm_q, norm_k, rotary_emb)
+    query, key, value = qkv.chunk(3, dim=-1)
+    return tuple(x.unflatten(-1, (heads, -1)) for x in (query, key, value))
+
+
+def _expand_batch_dim(x: torch.Tensor, batch_size: int) -> torch.Tensor:
+    if batch_size != int(x.shape[0]):
+        x = x.expand(batch_size, -1, -1).contiguous()
+    return x
+
+
+def _prepare_cpp_context(owner, hidden_states, attention_mask, *, txt_tokens: int, img_tokens: int):
+    heads = int(owner.config.num_attention_heads)
+    head_dim = int(owner.config.attention_head_dim)
+    batch_size = int(hidden_states.shape[0])
+    device = hidden_states.device
+    out_dtype = hidden_states.dtype
+
+    pad_size = 256
+    txt_pad = _pad_to_multiple(txt_tokens, pad_size)
+    img_pad = _pad_to_multiple(img_tokens, pad_size)
+    s_total = int(txt_tokens + img_tokens)
+    s_pad = _pad_to_multiple(s_total, pad_size)
+
+    ws_dual = _get_or_create_cpp_workspace(
+        owner,
+        "_nunchaku_cpp_ws_dual_shared",
+        batch_size=batch_size,
+        num_tokens_pad=txt_pad + img_pad,
+        heads=heads,
+        head_dim=head_dim,
+        device=device,
+        out_dtype=out_dtype,
+    )
+    ws_single = _get_or_create_cpp_workspace(
+        owner,
+        "_nunchaku_cpp_ws_single_shared",
+        batch_size=batch_size,
+        num_tokens_pad=s_pad,
+        heads=heads,
+        head_dim=head_dim,
+        device=device,
+        out_dtype=out_dtype,
+    )
+
+    attn_mask_fp16 = attention_mask.to(dtype=torch.float16)
+
+    mask_single = ws_single["m"]
+    mask_single.zero_()
+    mask_single[:, :s_total] = attn_mask_fp16
+
+    mask_dual = ws_dual["m"]
+    mask_dual.zero_()
+    mask_dual[:, :txt_tokens] = attn_mask_fp16[:, :txt_tokens]
+    mask_dual[:, txt_pad : txt_pad + img_tokens] = attn_mask_fp16[:, txt_tokens : txt_tokens + img_tokens]
+
+    return ws_dual, ws_single, mask_dual, mask_single
+
+
+def _dispatch_attention(query, key, value, attention_mask):
     """
     Chroma attention dispatch.
 
     Performance note:
     This function must NOT call `.item()` on CUDA tensors (it would introduce a device sync per block).
-    Any fast-path metadata (e.g. `valid_txt`) should be computed once per model forward.
     """
-    del txt_tokens, valid_txt
-
     from diffusers.models.transformers.transformer_flux import dispatch_attention_fn
 
     # No mask: allow fastest backend selection (FLASH where available).
@@ -256,18 +360,11 @@ class NunchakuChromaSingleTransformerBlock(nn.Module, NunchakuChromaTransformerB
         hidden_states,
         temb,
         image_rotary_emb=None,
-        attention_mask=None,
         attention_mask_1d=None,
-        txt_tokens: int | None = None,
-        valid_txt: int | None = None,
-        joint_attention_kwargs=None,
         cpp_workspace: dict | None = None,
         cpp_mask: torch.Tensor | None = None,
     ):
         from nunchaku.ops.fused import fused_gelu_mlp, fused_qkv_norm_rottary
-
-        if joint_attention_kwargs is not None and len(joint_attention_kwargs) > 0:
-            raise NotImplementedError("joint_attention_kwargs is not supported in NunchakuChromaSingleTransformerBlock")
 
         residual = hidden_states
         norm_hidden_states, gate = self.norm(hidden_states, emb=temb)
@@ -275,88 +372,34 @@ class NunchakuChromaSingleTransformerBlock(nn.Module, NunchakuChromaTransformerB
         mlp_out = fused_gelu_mlp(norm_hidden_states, self.mlp_fc1, self.mlp_fc2)
 
         # Optional C++/CUDA additive attention backend (exact Chroma semantics, B=1 only).
-        use_cpp_requested = os.getenv("NUNCHAKU_CHROMA_USE_CPP_ADDITIVE_ATTN", _CPP_ADDITIVE_ATTN_DEFAULT) == "1"
-        use_cpp = (
-            use_cpp_requested
-            and attention_mask_1d is not None
-            and norm_hidden_states.is_cuda
-            and int(self.head_dim) == 128
+        use_cpp = _should_use_cpp_additive_attn(
+            attention_mask_1d=attention_mask_1d,
+            hidden_states=norm_hidden_states,
+            head_dim=self.head_dim,
         )
-        if use_cpp_requested and not use_cpp:
-            if attention_mask_1d is None:
-                _log_cpp_additive_attn_fallback("missing attention_mask (attention_mask_1d is None)")
-            elif not norm_hidden_states.is_cuda:
-                _log_cpp_additive_attn_fallback("hidden_states is not CUDA")
-            elif int(self.head_dim) != 128:
-                _log_cpp_additive_attn_fallback(f"unsupported head_dim={int(self.head_dim)} (expected 128)")
         if use_cpp:
-            try:
-                from nunchaku._C.ops import chroma_additive_attention_packed_fp16
-
-                pad_size = 256
-                b, s = int(norm_hidden_states.shape[0]), int(norm_hidden_states.shape[1])
-                s_pad = int(math.ceil(s / pad_size) * pad_size)
-
-                if cpp_workspace is None:
-                    q = torch.empty(
-                        (b, self.heads, s_pad, self.head_dim),
-                        device=norm_hidden_states.device,
-                        dtype=torch.float16,
-                    )
-                    k = torch.empty_like(q)
-                    v = torch.empty_like(q)
-                    m = torch.empty((b, s_pad), device=norm_hidden_states.device, dtype=torch.float16)
-                    out = torch.empty(
-                        (b, s_pad, self.heads * self.head_dim),
-                        device=norm_hidden_states.device,
-                        dtype=norm_hidden_states.dtype,
-                    )
-                else:
-                    q, k, v, m, out = (
-                        cpp_workspace["q"],
-                        cpp_workspace["k"],
-                        cpp_workspace["v"],
-                        cpp_workspace["m"],
-                        cpp_workspace["out"],
-                    )
-
-                fused_qkv_norm_rottary(
-                    norm_hidden_states,
-                    self.qkv_proj,
-                    self.attn.norm_q,
-                    self.attn.norm_k,
-                    image_rotary_emb,
-                    output=(q, k, v),
-                    attn_tokens=s,
-                )
-
-                if cpp_mask is not None:
-                    m = cpp_mask
-                else:
-                    m.zero_()
-                    m[:, :s] = attention_mask_1d.to(dtype=torch.float16)
-
-                chroma_additive_attention_packed_fp16(q, k, v, m, out, 0.0)
-                attn_out = out[:, :s, :]
-            except Exception as e:
-                _log_cpp_additive_attn_fallback(f"exception in single-block cpp path: {type(e).__name__}: {e}")
-                use_cpp = False
-
-        if not use_cpp:
-            qkv = fused_qkv_norm_rottary(
+            assert cpp_workspace is not None and cpp_mask is not None
+            _, s, _ = norm_hidden_states.shape
+            q, k, v, _, out = _get_cpp_workspace_tensors(cpp_workspace)
+            fused_qkv_norm_rottary(
                 norm_hidden_states,
                 self.qkv_proj,
                 self.attn.norm_q,
                 self.attn.norm_k,
                 image_rotary_emb,
+                output=(q, k, v),
+                attn_tokens=int(s),
             )
-            query, key, value = qkv.chunk(3, dim=-1)
-            query = query.unflatten(-1, (self.heads, -1))
-            key = key.unflatten(-1, (self.heads, -1))
-            value = value.unflatten(-1, (self.heads, -1))
+            if _run_cpp_additive_attention(q, k, v, cpp_mask, out, context="single-block cpp path"):
+                attn_out = out[:, :s, :]
+            else:
+                use_cpp = False
 
-            attn_mask = attention_mask_1d if attention_mask_1d is not None else self._mask_to_4d(attention_mask)
-            attn_out = _dispatch_attention(query, key, value, attn_mask, txt_tokens=txt_tokens, valid_txt=valid_txt)
+        if not use_cpp:
+            query, key, value = _fused_qkv_heads(
+                norm_hidden_states, self.qkv_proj, self.attn.norm_q, self.attn.norm_k, image_rotary_emb, self.heads
+            )
+            attn_out = _dispatch_attention(query, key, value, attention_mask_1d)
             attn_out = attn_out.flatten(2, 3).to(query.dtype)
 
         proj = self.out_proj(attn_out) + mlp_out
@@ -480,8 +523,6 @@ class NunchakuChromaTransformerBlock(nn.Module, NunchakuChromaTransformerBlockMi
         # activation path for stable parity and image quality.
         self.mlp_context_fc2.act_unsigned = False
 
-        self.act = nn.GELU(approximate="tanh")
-
         self.norm_q = self.attn.norm_q
         self.norm_k = self.attn.norm_k
         self.norm_added_q = self.attn.norm_added_q
@@ -493,17 +534,11 @@ class NunchakuChromaTransformerBlock(nn.Module, NunchakuChromaTransformerBlockMi
         encoder_hidden_states,
         temb,
         image_rotary_emb=None,
-        attention_mask=None,
-        valid_txt: int | None = None,
-        joint_attention_kwargs=None,
         attention_mask_1d=None,
         cpp_workspace: dict | None = None,
         cpp_mask: torch.Tensor | None = None,
     ):
         from nunchaku.ops.fused import fused_gelu_mlp, fused_qkv_norm_rottary
-
-        if joint_attention_kwargs is not None and len(joint_attention_kwargs) > 0:
-            raise NotImplementedError("joint_attention_kwargs is not supported in NunchakuChromaTransformerBlock")
 
         temb_img, temb_txt = temb[:, :6], temb[:, 6:]
         norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=temb_img)
@@ -512,124 +547,61 @@ class NunchakuChromaTransformerBlock(nn.Module, NunchakuChromaTransformerBlockMi
         )
 
         rotary_img, rotary_txt = image_rotary_emb
-        use_cpp_requested = os.getenv("NUNCHAKU_CHROMA_USE_CPP_ADDITIVE_ATTN", _CPP_ADDITIVE_ATTN_DEFAULT) == "1"
-        use_cpp = (
-            use_cpp_requested
-            and attention_mask_1d is not None
-            and norm_hidden_states.is_cuda
-            and int(self.head_dim) == 128
+        use_cpp = _should_use_cpp_additive_attn(
+            attention_mask_1d=attention_mask_1d,
+            hidden_states=norm_hidden_states,
+            head_dim=self.head_dim,
         )
-        if use_cpp_requested and not use_cpp:
-            if attention_mask_1d is None:
-                _log_cpp_additive_attn_fallback("missing attention_mask (attention_mask_1d is None)")
-            elif not norm_hidden_states.is_cuda:
-                _log_cpp_additive_attn_fallback("hidden_states is not CUDA")
-            elif int(self.head_dim) != 128:
-                _log_cpp_additive_attn_fallback(f"unsupported head_dim={int(self.head_dim)} (expected 128)")
 
         txt_len = int(norm_encoder_hidden_states.shape[1])
         img_len = int(norm_hidden_states.shape[1])
 
         if use_cpp:
-            try:
-                from nunchaku._C.ops import chroma_additive_attention_packed_fp16
-
-                pad_size = 256
-                txt_pad = int(math.ceil(txt_len / pad_size) * pad_size)
-                img_pad = int(math.ceil(img_len / pad_size) * pad_size)
-                num_tokens_pad = txt_pad + img_pad
-                b = int(norm_hidden_states.shape[0])
-
-                if cpp_workspace is None:
-                    q = torch.empty(
-                        (b, self.heads, num_tokens_pad, self.head_dim),
-                        device=norm_hidden_states.device,
-                        dtype=torch.float16,
-                    )
-                    k = torch.empty_like(q)
-                    v = torch.empty_like(q)
-                    m = torch.empty((b, num_tokens_pad), device=norm_hidden_states.device, dtype=torch.float16)
-                    out = torch.empty(
-                        (b, num_tokens_pad, self.heads * self.head_dim),
-                        device=norm_hidden_states.device,
-                        dtype=norm_hidden_states.dtype,
-                    )
-                else:
-                    q, k, v, m, out = (
-                        cpp_workspace["q"],
-                        cpp_workspace["k"],
-                        cpp_workspace["v"],
-                        cpp_workspace["m"],
-                        cpp_workspace["out"],
-                    )
-
-                fused_qkv_norm_rottary(
-                    norm_hidden_states,
-                    self.qkv_proj,
-                    self.attn.norm_q,
-                    self.attn.norm_k,
-                    rotary_img,
-                    output=(q[:, :, txt_pad:], k[:, :, txt_pad:], v[:, :, txt_pad:]),
-                    attn_tokens=img_len,
-                )
-                fused_qkv_norm_rottary(
-                    norm_encoder_hidden_states,
-                    self.qkv_proj_context,
-                    self.attn.norm_added_q,
-                    self.attn.norm_added_k,
-                    rotary_txt,
-                    output=(q[:, :, :txt_pad], k[:, :, :txt_pad], v[:, :, :txt_pad]),
-                    attn_tokens=txt_len,
-                )
-
-                if cpp_mask is not None:
-                    m = cpp_mask
-                else:
-                    m.zero_()
-                    m[:, :txt_len] = attention_mask_1d[:, :txt_len].to(dtype=torch.float16)
-                    m[:, txt_pad : txt_pad + img_len] = attention_mask_1d[:, txt_len : txt_len + img_len].to(
-                        dtype=torch.float16
-                    )
-
-                chroma_additive_attention_packed_fp16(q, k, v, m, out, 0.0)
-
-                context_attn_output = out[:, :txt_len, :]
-                attn_output = out[:, txt_pad : txt_pad + img_len, :]
-            except Exception as e:
-                _log_cpp_additive_attn_fallback(f"exception in dual-block cpp path: {type(e).__name__}: {e}")
-                use_cpp = False
-
-        if not use_cpp:
-            qkv = fused_qkv_norm_rottary(
+            assert cpp_workspace is not None and cpp_mask is not None
+            txt_pad = _pad_to_multiple(txt_len, 256)
+            q, k, v, _, out = _get_cpp_workspace_tensors(cpp_workspace)
+            fused_qkv_norm_rottary(
                 norm_hidden_states,
                 self.qkv_proj,
                 self.attn.norm_q,
                 self.attn.norm_k,
                 rotary_img,
+                output=(q[:, :, txt_pad:], k[:, :, txt_pad:], v[:, :, txt_pad:]),
+                attn_tokens=img_len,
             )
-            query, key, value = qkv.chunk(3, dim=-1)
-            query = query.unflatten(-1, (self.heads, -1))
-            key = key.unflatten(-1, (self.heads, -1))
-            value = value.unflatten(-1, (self.heads, -1))
-
-            qkv_c = fused_qkv_norm_rottary(
+            fused_qkv_norm_rottary(
                 norm_encoder_hidden_states,
                 self.qkv_proj_context,
                 self.attn.norm_added_q,
                 self.attn.norm_added_k,
                 rotary_txt,
+                output=(q[:, :, :txt_pad], k[:, :, :txt_pad], v[:, :, :txt_pad]),
+                attn_tokens=txt_len,
             )
-            c_query, c_key, c_value = qkv_c.chunk(3, dim=-1)
-            c_query = c_query.unflatten(-1, (self.heads, -1))
-            c_key = c_key.unflatten(-1, (self.heads, -1))
-            c_value = c_value.unflatten(-1, (self.heads, -1))
+            if _run_cpp_additive_attention(q, k, v, cpp_mask, out, context="dual-block cpp path"):
+                context_attn_output = out[:, :txt_len, :]
+                attn_output = out[:, txt_pad : txt_pad + img_len, :]
+            else:
+                use_cpp = False
+
+        if not use_cpp:
+            query, key, value = _fused_qkv_heads(
+                norm_hidden_states, self.qkv_proj, self.attn.norm_q, self.attn.norm_k, rotary_img, self.heads
+            )
+            c_query, c_key, c_value = _fused_qkv_heads(
+                norm_encoder_hidden_states,
+                self.qkv_proj_context,
+                self.attn.norm_added_q,
+                self.attn.norm_added_k,
+                rotary_txt,
+                self.heads,
+            )
 
             query = torch.cat([c_query, query], dim=1)
             key = torch.cat([c_key, key], dim=1)
             value = torch.cat([c_value, value], dim=1)
 
-            attn_mask = attention_mask_1d if attention_mask_1d is not None else self._mask_to_4d(attention_mask)
-            attn_out = _dispatch_attention(query, key, value, attn_mask, txt_tokens=int(txt_len), valid_txt=valid_txt)
+            attn_out = _dispatch_attention(query, key, value, attention_mask_1d)
             attn_out = attn_out.flatten(2, 3).to(query.dtype)
 
             context_attn_output, attn_output = attn_out.split_with_sizes([txt_len, attn_out.shape[1] - txt_len], dim=1)
@@ -692,8 +664,6 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         )
         self.nunchaku_precision = str(precision)
         self.nunchaku_rank = int(rank)
-        self.nunchaku_chroma_use_cpp_attention: bool = False
-        self.nunchaku_chroma_debug: bool = False
 
         patch_size = int(self.config.patch_size)
         in_channels = int(self.config.in_channels)
@@ -773,8 +743,6 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         *,
         device: str = "cuda",
         torch_dtype: Any = None,
-        use_cpp_attention: bool = False,
-        debug: bool = False,
         precision: str | None = None,
         rank: int | None = None,
         verbose: bool = True,
@@ -823,8 +791,6 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
             device=torch.device(device),
             dtype=torch_dtype,
         )
-        model.nunchaku_chroma_use_cpp_attention = bool(use_cpp_attention)
-        model.nunchaku_chroma_debug = bool(debug)
 
         from nunchaku.models.transformers.utils import patch_scale_key
 
@@ -880,8 +846,8 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
 
         if controlnet_block_samples is not None or controlnet_single_block_samples is not None:
             raise NotImplementedError("ControlNet is not supported in NunchakuChromaTransformer2dModel")
-        if joint_attention_kwargs is not None and "ip_adapter_image_embeds" in joint_attention_kwargs:
-            raise NotImplementedError("IP-Adapter is not supported in NunchakuChromaTransformer2dModel")
+        if joint_attention_kwargs:
+            raise NotImplementedError("joint_attention_kwargs is not supported in NunchakuChromaTransformer2dModel")
 
         if txt_ids.ndim == 3:
             txt_ids = txt_ids[0]
@@ -902,7 +868,6 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         txt_tokens = int(encoder_hidden_states.shape[1])
         img_tokens = int(hidden_states.shape[1])
         attn_mask_1d = attention_mask
-        valid_txt: int | None = None
         assert image_rotary_emb.ndim == 6
         assert image_rotary_emb.shape[0] == 1
         assert image_rotary_emb.shape[1] == 1
@@ -912,70 +877,23 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         rotary_emb_img = pack_rotemb(pad_tensor(image_rotary_emb[:, txt_tokens:, ...], 256, 1))
         rotary_emb_single = pack_rotemb(pad_tensor(image_rotary_emb, 256, 1))
 
-        if batch_size != int(rotary_emb_txt.shape[0]):
-            rotary_emb_txt = rotary_emb_txt.expand(batch_size, -1, -1).contiguous()
-        if batch_size != int(rotary_emb_img.shape[0]):
-            rotary_emb_img = rotary_emb_img.expand(batch_size, -1, -1).contiguous()
-        if batch_size != int(rotary_emb_single.shape[0]):
-            rotary_emb_single = rotary_emb_single.expand(batch_size, -1, -1).contiguous()
+        rotary_emb_txt = _expand_batch_dim(rotary_emb_txt, batch_size)
+        rotary_emb_img = _expand_batch_dim(rotary_emb_img, batch_size)
+        rotary_emb_single = _expand_batch_dim(rotary_emb_single, batch_size)
 
-        use_cpp_ws = (
-            os.getenv("NUNCHAKU_CHROMA_USE_CPP_ADDITIVE_ATTN", _CPP_ADDITIVE_ATTN_DEFAULT) == "1"
-            and hidden_states.is_cuda
-            and attention_mask is not None
-            and int(self.config.attention_head_dim) == 128
+        use_cpp_ws = _should_use_cpp_additive_attn(
+            attention_mask_1d=attn_mask_1d,
+            hidden_states=hidden_states,
+            head_dim=int(self.config.attention_head_dim),
         )
         ws_dual: dict | None = None
         ws_single: dict | None = None
         mask_dual: torch.Tensor | None = None
         mask_single: torch.Tensor | None = None
         if use_cpp_ws:
-            heads = int(self.config.num_attention_heads)
-            head_dim = int(self.config.attention_head_dim)
-
-            pad_size = 256
-            txt_pad = int(math.ceil(txt_tokens / pad_size) * pad_size)
-            img_pad = int(math.ceil(img_tokens / pad_size) * pad_size)
-            num_tokens_pad = int(txt_pad + img_pad)
-
-            key_dual = (batch_size, num_tokens_pad, heads, head_dim, str(hidden_states.device), hidden_states.dtype)
-            ws_dual = getattr(self, "_nunchaku_cpp_ws_dual_shared", None)
-            if ws_dual is None or ws_dual.get("key") != key_dual:
-                ws_dual = {
-                    "key": key_dual,
-                    "q": torch.empty((batch_size, heads, num_tokens_pad, head_dim), device=hidden_states.device, dtype=torch.float16),
-                    "k": torch.empty((batch_size, heads, num_tokens_pad, head_dim), device=hidden_states.device, dtype=torch.float16),
-                    "v": torch.empty((batch_size, heads, num_tokens_pad, head_dim), device=hidden_states.device, dtype=torch.float16),
-                    "m": torch.empty((batch_size, num_tokens_pad), device=hidden_states.device, dtype=torch.float16),
-                    "out": torch.empty((batch_size, num_tokens_pad, heads * head_dim), device=hidden_states.device, dtype=hidden_states.dtype),
-                }
-                self._nunchaku_cpp_ws_dual_shared = ws_dual
-
-            s_total = int(txt_tokens + img_tokens)
-            s_pad = int(math.ceil(s_total / pad_size) * pad_size)
-            key_single = (batch_size, s_pad, heads, head_dim, str(hidden_states.device), hidden_states.dtype)
-            ws_single = getattr(self, "_nunchaku_cpp_ws_single_shared", None)
-            if ws_single is None or ws_single.get("key") != key_single:
-                ws_single = {
-                    "key": key_single,
-                    "q": torch.empty((batch_size, heads, s_pad, head_dim), device=hidden_states.device, dtype=torch.float16),
-                    "k": torch.empty((batch_size, heads, s_pad, head_dim), device=hidden_states.device, dtype=torch.float16),
-                    "v": torch.empty((batch_size, heads, s_pad, head_dim), device=hidden_states.device, dtype=torch.float16),
-                    "m": torch.empty((batch_size, s_pad), device=hidden_states.device, dtype=torch.float16),
-                    "out": torch.empty((batch_size, s_pad, heads * head_dim), device=hidden_states.device, dtype=hidden_states.dtype),
-                }
-                self._nunchaku_cpp_ws_single_shared = ws_single
-
-            if attention_mask is not None:
-                attn_mask_fp16 = attention_mask.to(dtype=torch.float16)
-                mask_single = ws_single["m"]
-                mask_single.zero_()
-                mask_single[:, :s_total] = attn_mask_fp16
-
-                mask_dual = ws_dual["m"]
-                mask_dual.zero_()
-                mask_dual[:, :txt_tokens] = attn_mask_fp16[:, :txt_tokens]
-                mask_dual[:, txt_pad : txt_pad + img_tokens] = attn_mask_fp16[:, txt_tokens : txt_tokens + img_tokens]
+            ws_dual, ws_single, mask_dual, mask_single = _prepare_cpp_context(
+                self, hidden_states, attention_mask, txt_tokens=txt_tokens, img_tokens=img_tokens
+            )
 
         num_layers = len(self.transformer_blocks)
         num_single = len(self.single_transformer_blocks)
@@ -994,9 +912,6 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
                 encoder_hidden_states=encoder_hidden_states,
                 temb=temb,
                 image_rotary_emb=(rotary_emb_img, rotary_emb_txt),
-                attention_mask=None,
-                valid_txt=valid_txt,
-                joint_attention_kwargs=joint_attention_kwargs,
                 attention_mask_1d=attn_mask_1d,
                 cpp_workspace=ws_dual,
                 cpp_mask=mask_dual,
@@ -1011,11 +926,7 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
                 hidden_states=hidden_states,
                 temb=temb,
                 image_rotary_emb=rotary_emb_single,
-                attention_mask=None,
                 attention_mask_1d=attn_mask_1d,
-                txt_tokens=txt_tokens,
-                valid_txt=valid_txt,
-                joint_attention_kwargs=joint_attention_kwargs,
                 cpp_workspace=ws_single,
                 cpp_mask=mask_single,
             )
