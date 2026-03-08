@@ -88,7 +88,15 @@ def _build_attn_norms(*, head_dim: int, eps: float, with_added: bool, device, dt
 
 
 def _should_use_cpp_additive_attn(*, attention_mask_1d, hidden_states, head_dim: int) -> bool:
-    return attention_mask_1d is not None and hidden_states.is_cuda and int(head_dim) == 128
+    # Keep the packed C++ path on the most battle-tested shape only.
+    # CFG merge uses B=2; some environments may still have an older compiled
+    # extension where the B>1 packed path is incorrect and can produce black images.
+    return (
+        attention_mask_1d is not None
+        and hidden_states.is_cuda
+        and int(head_dim) == 128
+        and int(hidden_states.shape[0]) == 1
+    )
 
 
 def _pad_to_multiple(n: int, multiple: int) -> int:
@@ -224,10 +232,10 @@ def _dispatch_attention(query, key, value, attention_mask):
     #
     # We can fold this outer-product bias into the QK dot-product by augmenting Q/K with extra dims, and then run
     # fast attention with attn_mask=None while preserving semantics closely.
-    if attention_mask.ndim == 2 and query.shape[0] == 1:
+    if attention_mask.ndim == 2:
         b, s = attention_mask.shape
-        if b != 1:
-            raise ValueError(f"Only batch_size=1 is supported for folded-mask fast path (got B={b}).")
+        if int(query.shape[0]) != int(b):
+            raise ValueError(f"Mask/query batch mismatch: mask B={int(b)}, query B={int(query.shape[0])}")
         if int(query.shape[1]) != int(s) or int(key.shape[1]) != int(s):
             raise ValueError(
                 f"Mask/sequence length mismatch: mask S={int(s)}, query S={int(query.shape[1])}, key S={int(key.shape[1])}"
