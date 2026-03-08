@@ -224,10 +224,10 @@ def _dispatch_attention(query, key, value, attention_mask):
     #
     # We can fold this outer-product bias into the QK dot-product by augmenting Q/K with extra dims, and then run
     # fast attention with attn_mask=None while preserving semantics closely.
-    if attention_mask.ndim == 2:
+    if attention_mask.ndim == 2 and query.shape[0] == 1:
         b, s = attention_mask.shape
-        if int(query.shape[0]) != int(b):
-            raise ValueError(f"Mask/query batch mismatch: mask B={int(b)}, query B={int(query.shape[0])}")
+        if b != 1:
+            raise ValueError(f"Only batch_size=1 is supported for folded-mask fast path (got B={b}).")
         if int(query.shape[1]) != int(s) or int(key.shape[1]) != int(s):
             raise ValueError(
                 f"Mask/sequence length mismatch: mask S={int(s)}, query S={int(query.shape[1])}, key S={int(key.shape[1])}"
