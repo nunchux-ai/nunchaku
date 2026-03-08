@@ -5,8 +5,14 @@ from pathlib import Path
 import pytest
 import torch
 
-from tests.utils import already_generate, compute_lpips
-from tests.v1.utils import run_pipeline
+from nunchaku.utils import get_gpu_memory, get_precision, is_turing
+
+from ...utils import already_generate, compute_lpips
+from ..utils import run_pipeline
+
+precision = get_precision()
+torch_dtype = torch.float16 if is_turing() else torch.bfloat16
+dtype_str = "fp16" if torch_dtype == torch.float16 else "bf16"
 
 
 class Case:
@@ -71,15 +77,6 @@ class Case:
         return save_dir_16bit, save_dir_nunchaku
 
 
-def _get_runtime_config() -> tuple[str, torch.dtype, str]:
-    from nunchaku.utils import get_precision, is_turing
-
-    precision = get_precision()
-    torch_dtype = torch.float16 if is_turing() else torch.bfloat16
-    dtype_str = "fp16" if torch_dtype == torch.float16 else "bf16"
-    return precision, torch_dtype, dtype_str
-
-
 @pytest.mark.parametrize("case", [pytest.param(Case(), id="chroma1-hd")])
 def test_chroma1_hd(case: Case):
     if not torch.cuda.is_available():
@@ -101,10 +98,8 @@ def test_chroma1_hd(case: Case):
     except Exception as e:
         pytest.skip(f"diffusers.ChromaPipeline is unavailable: {type(e).__name__}: {e}")
 
-    from nunchaku.utils import get_gpu_memory
-
-    precision, torch_dtype, dtype_str = _get_runtime_config()
     save_dir_16bit, save_dir_nunchaku = case.get_save_dirs(precision, dtype_str)
+    batch_size = case.batch_size
 
     # Local dir or HF repo_id for diffusers model.
     chroma_model = os.environ.get("NUNCHAKU_CHROMA_MODEL", "").strip()
@@ -131,6 +126,7 @@ def test_chroma1_hd(case: Case):
             "filename": "mountain_sunrise",
         },
     ]
+    assert len(dataset) % batch_size == 0, "dataset size must be divisible by batch_size"
 
     # 1) Generate (and cache) 16-bit reference images.
     if not already_generate(save_dir_16bit, len(dataset)):
@@ -144,7 +140,7 @@ def test_chroma1_hd(case: Case):
             pipe_ref = pipe_ref.to("cuda")
         run_pipeline(
             dataset=dataset,
-            batch_size=case.batch_size,
+            batch_size=batch_size,
             pipeline=pipe_ref,
             save_dir=save_dir_16bit,
             forward_kwargs=case.forward_kwargs,
@@ -168,7 +164,7 @@ def test_chroma1_hd(case: Case):
 
     run_pipeline(
         dataset=dataset,
-        batch_size=case.batch_size,
+        batch_size=batch_size,
         pipeline=pipe,
         save_dir=save_dir_nunchaku,
         forward_kwargs=case.forward_kwargs,
