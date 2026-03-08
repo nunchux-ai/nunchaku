@@ -150,12 +150,9 @@ class SVDQW4A4Linear(nn.Module):
         """
         in_features = kwargs.pop("in_features", linear.in_features)
         torch_dtype = kwargs.pop("torch_dtype", linear.weight.dtype)
-        # Mirror the existing "pop to de-duplicate" pattern for loader-only keys.
-        # `from_linear` always uses the source layer's device, so passing a `device`
-        # kwarg from upstream loaders would only risk duplication / unexpected kwargs.
+        # `from_linear` always passes the source layer's device explicitly below,
+        # so an incoming `device` kwarg would otherwise be duplicated.
         kwargs.pop("device", None)
-        kwargs.pop("pin_memory", None)
-        kwargs.pop("offload", None)
         return cls(
             in_features=in_features,
             out_features=linear.out_features,

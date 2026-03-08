@@ -389,7 +389,8 @@ class NunchakuZImageTransformer2DModel(ZImageTransformer2DModel, NunchakuModelLo
             If the file is not a safetensors file.
         """
         device = kwargs.get("device", "cpu")
-        offload = kwargs.get("offload", False)
+        offload = kwargs.pop("offload", False)
+        kwargs.pop("pin_memory", None)
 
         if offload:
             raise NotImplementedError("Offload is not supported for ZImageTransformer2DModel")
