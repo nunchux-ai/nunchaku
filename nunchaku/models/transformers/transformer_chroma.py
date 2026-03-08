@@ -842,6 +842,15 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         sd_filtered = {k: v for k, v in sd.items() if k in wanted}
         model.load_state_dict(sd_filtered, strict=True)
 
+        if str(inferred_precision) == "int4":
+            # Temporary Chroma-specific diagnostic workaround:
+            # `mlp_context_fc2` parity strongly suggests its exported smooth values
+            # are not compatible with the current runtime semantics. Force neutral
+            # smooth factors here to isolate the remaining quality gap.
+            for block in model.transformer_blocks:
+                block.mlp_context_fc2.smooth_factor.data.fill_(1)
+                block.mlp_context_fc2.smooth_factor_orig.data.fill_(1)
+
         _maybe_log(verbose, "[nunchaku.chroma] loaded:", str(ckpt))
         _maybe_log(verbose, "[nunchaku.chroma] precision:", inferred_precision, "rank:", inferred_rank, "dtype:", torch_dtype)
         _maybe_log(
