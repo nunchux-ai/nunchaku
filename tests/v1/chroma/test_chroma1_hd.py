@@ -5,19 +5,54 @@ from pathlib import Path
 
 import pytest
 import torch
+from diffusers import DiffusionPipeline
+from tqdm import trange
 
 from nunchaku.utils import get_gpu_memory, get_precision, is_turing
 
-TESTS_DIR = Path(__file__).resolve().parents[2]
-if str(TESTS_DIR) not in sys.path:
-    sys.path.insert(0, str(TESTS_DIR))
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from utils import already_generate, compute_lpips
-from v1.utils import run_pipeline
+from tests.utils import already_generate, compute_lpips, hash_str_to_int
 
 precision = get_precision()
 torch_dtype = torch.float16 if is_turing() else torch.bfloat16
 dtype_str = "fp16" if torch_dtype == torch.float16 else "bf16"
+
+
+def run_pipeline(
+    dataset: list[dict],
+    batch_size: int,
+    pipeline: DiffusionPipeline,
+    save_dir: os.PathLike[str],
+    forward_kwargs: dict = {},
+):
+    if isinstance(save_dir, str):
+        save_dir = Path(save_dir)
+    assert isinstance(save_dir, Path)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    pipeline.set_progress_bar_config(desc="Sampling", leave=False, dynamic_ncols=True, position=1)
+    for batch_idx in trange(len(dataset) // batch_size, desc="Batch", position=0, leave=False):
+        start_idx = batch_idx * batch_size
+        end_idx = start_idx + batch_size
+        batch = dataset[start_idx:end_idx]
+
+        filenames = [_["filename"] for _ in batch]
+        generators = [torch.Generator().manual_seed(hash_str_to_int(filename)) for filename in filenames]
+        _forward_kwargs = {k: v for k, v in forward_kwargs.items()}
+        _forward_kwargs["generator"] = generators if batch_size > 1 else generators[0]
+        for k in batch[0].keys():
+            if k == "filename":
+                continue
+            _forward_kwargs[k] = [_[k] for _ in batch] if batch_size > 1 else batch[0][k]
+        images = pipeline(**_forward_kwargs).images
+        for i, image in enumerate(images):
+            filename = filenames[i]
+            image.save(os.path.join(save_dir, f"{filename}.png"))
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 class Case:
