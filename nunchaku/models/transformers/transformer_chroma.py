@@ -247,10 +247,6 @@ class NunchakuChromaSingleTransformerBlock(nn.Module, NunchakuChromaTransformerB
             torch_dtype=dtype,
             device=device,
         )
-        # Temporary diagnostic workaround:
-        # Chroma int4 down-proj parity is badly broken when using the unsigned activation path.
-        # Force the signed path here to validate runtime correctness end-to-end.
-        self.mlp_fc2.act_unsigned = False
 
         self.norm_q = self.attn.norm_q
         self.norm_k = self.attn.norm_k
@@ -460,10 +456,6 @@ class NunchakuChromaTransformerBlock(nn.Module, NunchakuChromaTransformerBlockMi
             torch_dtype=dtype,
             device=device,
         )
-        # Temporary diagnostic workaround:
-        # Chroma int4 down-proj parity is badly broken when using the unsigned activation path.
-        # Force the signed path here to validate runtime correctness end-to-end.
-        self.mlp_fc2.act_unsigned = False
 
         self.mlp_context_fc1 = SVDQW4A4Linear(
             in_features=dim,
@@ -483,9 +475,9 @@ class NunchakuChromaTransformerBlock(nn.Module, NunchakuChromaTransformerBlockMi
             torch_dtype=dtype,
             device=device,
         )
-        # Temporary diagnostic workaround:
-        # Chroma int4 down-proj parity is badly broken when using the unsigned activation path.
-        # Force the signed path here to validate runtime correctness end-to-end.
+        # Chroma int4 compatibility:
+        # the context-stream MLP down-projection also needs the signed
+        # activation path for stable parity and image quality.
         self.mlp_context_fc2.act_unsigned = False
 
         self.act = nn.GELU(approximate="tanh")
