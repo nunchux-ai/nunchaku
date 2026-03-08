@@ -156,6 +156,58 @@ def _expand_batch_dim(x: torch.Tensor, batch_size: int) -> torch.Tensor:
     return x
 
 
+def _tensor_identity_key(x: torch.Tensor | None):
+    if x is None:
+        return None
+    return (
+        str(x.device),
+        str(x.dtype),
+        tuple(x.shape),
+        tuple(x.stride()),
+        int(x.data_ptr()),
+        int(x.storage_offset()),
+        int(getattr(x, "_version", 0)),
+    )
+
+
+def _get_or_create_rotary_cache(owner, txt_ids, img_ids, *, batch_size: int):
+    from nunchaku.models.embeddings import pack_rotemb
+    from nunchaku.utils import pad_tensor
+
+    key = (_tensor_identity_key(txt_ids), _tensor_identity_key(img_ids), int(batch_size))
+    cache = getattr(owner, "_nunchaku_rotary_cache", None)
+    if cache is not None and cache.get("key") == key:
+        return cache["txt"], cache["img"], cache["single"]
+
+    ids = torch.cat((txt_ids, img_ids), dim=0)
+    image_rotary_emb = owner.pos_embed(ids)
+
+    txt_tokens = int(txt_ids.shape[0])
+    img_tokens = int(img_ids.shape[0])
+    assert image_rotary_emb.ndim == 6
+    assert image_rotary_emb.shape[0] == 1
+    assert image_rotary_emb.shape[1] == 1
+    assert image_rotary_emb.shape[2] == 1 * (txt_tokens + img_tokens)
+    image_rotary_emb = image_rotary_emb.reshape([1, txt_tokens + img_tokens, *image_rotary_emb.shape[3:]])
+
+    rotary_emb_txt = pack_rotemb(pad_tensor(image_rotary_emb[:, :txt_tokens, ...], 256, 1))
+    rotary_emb_img = pack_rotemb(pad_tensor(image_rotary_emb[:, txt_tokens:, ...], 256, 1))
+    rotary_emb_single = pack_rotemb(pad_tensor(image_rotary_emb, 256, 1))
+
+    rotary_emb_txt = _expand_batch_dim(rotary_emb_txt, batch_size)
+    rotary_emb_img = _expand_batch_dim(rotary_emb_img, batch_size)
+    rotary_emb_single = _expand_batch_dim(rotary_emb_single, batch_size)
+
+    cache = {
+        "key": key,
+        "txt": rotary_emb_txt,
+        "img": rotary_emb_img,
+        "single": rotary_emb_single,
+    }
+    setattr(owner, "_nunchaku_rotary_cache", cache)
+    return rotary_emb_txt, rotary_emb_img, rotary_emb_single
+
+
 def _prepare_cpp_context(owner, hidden_states, attention_mask, *, txt_tokens: int, img_tokens: int):
     heads = int(owner.config.num_attention_heads)
     head_dim = int(owner.config.attention_head_dim)
@@ -190,6 +242,20 @@ def _prepare_cpp_context(owner, hidden_states, attention_mask, *, txt_tokens: in
         out_dtype=out_dtype,
     )
 
+    key = (
+        _tensor_identity_key(attention_mask),
+        batch_size,
+        txt_tokens,
+        img_tokens,
+        str(device),
+        str(out_dtype),
+        ws_dual["key"],
+        ws_single["key"],
+    )
+    cache = getattr(owner, "_nunchaku_cpp_ctx_cache", None)
+    if cache is not None and cache.get("key") == key:
+        return ws_dual, ws_single, ws_dual["m"], ws_single["m"]
+
     attn_mask_fp16 = attention_mask.to(dtype=torch.float16)
 
     mask_single = ws_single["m"]
@@ -201,6 +267,7 @@ def _prepare_cpp_context(owner, hidden_states, attention_mask, *, txt_tokens: in
     mask_dual[:, :txt_tokens] = attn_mask_fp16[:, :txt_tokens]
     mask_dual[:, txt_pad : txt_pad + img_tokens] = attn_mask_fp16[:, txt_tokens : txt_tokens + img_tokens]
 
+    setattr(owner, "_nunchaku_cpp_ctx_cache", {"key": key})
     return ws_dual, ws_single, mask_dual, mask_single
 
 
@@ -735,6 +802,8 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         )
 
         self.encoder_hid_proj = None
+        self._nunchaku_rotary_cache = None
+        self._nunchaku_cpp_ctx_cache = None
 
     @classmethod
     def from_pretrained(
@@ -841,9 +910,6 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         del controlnet_blocks_repeat
 
         from diffusers.models.modeling_outputs import Transformer2DModelOutput
-        from nunchaku.models.embeddings import pack_rotemb
-        from nunchaku.utils import pad_tensor
-
         if controlnet_block_samples is not None or controlnet_single_block_samples is not None:
             raise NotImplementedError("ControlNet is not supported in NunchakuChromaTransformer2dModel")
         if joint_attention_kwargs:
@@ -862,24 +928,13 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         pooled_temb = self.distilled_guidance_layer(input_vec)
 
         encoder_hidden_states = self.context_embedder(encoder_hidden_states)
-        ids = torch.cat((txt_ids, img_ids), dim=0)
-        image_rotary_emb = self.pos_embed(ids)
 
         txt_tokens = int(encoder_hidden_states.shape[1])
         img_tokens = int(hidden_states.shape[1])
         attn_mask_1d = attention_mask
-        assert image_rotary_emb.ndim == 6
-        assert image_rotary_emb.shape[0] == 1
-        assert image_rotary_emb.shape[1] == 1
-        assert image_rotary_emb.shape[2] == 1 * (txt_tokens + img_tokens)
-        image_rotary_emb = image_rotary_emb.reshape([1, txt_tokens + img_tokens, *image_rotary_emb.shape[3:]])
-        rotary_emb_txt = pack_rotemb(pad_tensor(image_rotary_emb[:, :txt_tokens, ...], 256, 1))
-        rotary_emb_img = pack_rotemb(pad_tensor(image_rotary_emb[:, txt_tokens:, ...], 256, 1))
-        rotary_emb_single = pack_rotemb(pad_tensor(image_rotary_emb, 256, 1))
-
-        rotary_emb_txt = _expand_batch_dim(rotary_emb_txt, batch_size)
-        rotary_emb_img = _expand_batch_dim(rotary_emb_img, batch_size)
-        rotary_emb_single = _expand_batch_dim(rotary_emb_single, batch_size)
+        rotary_emb_txt, rotary_emb_img, rotary_emb_single = _get_or_create_rotary_cache(
+            self, txt_ids, img_ids, batch_size=batch_size
+        )
 
         use_cpp_ws = _should_use_cpp_additive_attn(
             attention_mask_1d=attn_mask_1d,
