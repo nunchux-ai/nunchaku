@@ -811,14 +811,14 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
                 block.mlp_context_fc2.smooth_factor.data.copy_(block.mlp_context_fc2.smooth_factor_orig.data)
 
         _maybe_log(verbose, "[nunchaku.chroma] loaded:", str(ckpt))
-        _maybe_log(verbose, "[nunchaku.chroma] precision:", inferred_precision, "rank:", inferred_rank, "dtype:", torch_dtype)
-        _maybe_log(
-            verbose,
-            "[nunchaku.chroma] config.num_layers:",
-            int(config["num_layers"]),
-            "num_single_layers:",
-            int(config["num_single_layers"]),
-        )
+        # _maybe_log(verbose, "[nunchaku.chroma] precision:", inferred_precision, "rank:", inferred_rank, "dtype:", torch_dtype)
+        # _maybe_log(
+        #     verbose,
+        #     "[nunchaku.chroma] config.num_layers:",
+        #     int(config["num_layers"]),
+        #     "num_single_layers:",
+        #     int(config["num_single_layers"]),
+        # )
 
         if return_report:
             return model, LoadReport(config=config, precision=str(inferred_precision), rank=int(inferred_rank))
