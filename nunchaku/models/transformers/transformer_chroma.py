@@ -843,10 +843,13 @@ class NunchakuChromaTransformer2dModel(ModelMixin, ConfigMixin):
         model.load_state_dict(sd_filtered, strict=True)
 
         if str(inferred_precision) == "int4":
-            # Temporary Chroma-specific diagnostic workaround:
-            # `mlp_context_fc2` parity indicates the runtime may need the original
-            # smooth values rather than the exported active smooth tensor.
+            # Chroma int4 compatibility:
+            # several dual-stream layers match the exported model much better
+            # when the runtime consumes `smooth_factor_orig` instead of
+            # `smooth_factor`. This is intentionally scoped to Chroma int4.
             for block in model.transformer_blocks:
+                block.qkv_proj.smooth_factor.data.copy_(block.qkv_proj.smooth_factor_orig.data)
+                block.qkv_proj_context.smooth_factor.data.copy_(block.qkv_proj_context.smooth_factor_orig.data)
                 block.mlp_context_fc2.smooth_factor.data.copy_(block.mlp_context_fc2.smooth_factor_orig.data)
 
         _maybe_log(verbose, "[nunchaku.chroma] loaded:", str(ckpt))
