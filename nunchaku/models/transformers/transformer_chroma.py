@@ -88,15 +88,7 @@ def _build_attn_norms(*, head_dim: int, eps: float, with_added: bool, device, dt
 
 
 def _should_use_cpp_additive_attn(*, attention_mask_1d, hidden_states, head_dim: int) -> bool:
-    # Keep the packed C++ path on the most battle-tested shape only.
-    # CFG merge uses B=2; some environments may still have an older compiled
-    # extension where the B>1 packed path is incorrect and can produce black images.
-    return (
-        attention_mask_1d is not None
-        and hidden_states.is_cuda
-        and int(head_dim) == 128
-        and int(hidden_states.shape[0]) == 1
-    )
+    return attention_mask_1d is not None and hidden_states.is_cuda and int(head_dim) == 128
 
 
 def _pad_to_multiple(n: int, multiple: int) -> int:
