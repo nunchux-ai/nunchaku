@@ -121,3 +121,81 @@ class NunchakuFeedForward(FeedForward):
             for module in self.net:
                 hidden_states = module(hidden_states)
             return hidden_states
+
+    def update_lora_params(self, lora_dict: dict[str, torch.Tensor]):
+        """
+        Update LoRA parameters for the feed-forward network.
+
+        This method handles LoRA weights for the MLP layers in the feed-forward network.
+        The LoRA weights are in Nunchaku format (packed lora_down/lora_up) and are
+        directly replaced into the low-rank projections.
+
+        Parameters
+        ----------
+        lora_dict : dict[str, torch.Tensor]
+            Dictionary containing LoRA weights for this feed-forward module.
+            Expected keys: 'net.0.proj.lora_down', 'net.0.proj.lora_up', 'net.2.lora_down', 'net.2.lora_up'
+        """
+        import logging
+
+        from ..linear import SVDQW4A4Linear
+
+        logger = logging.getLogger(__name__)
+
+        # Helper function to apply LoRA to a SVDQW4A4Linear layer
+        def apply_lora_to_linear(linear_layer, lora_dict, layer_prefix):
+            lora_down_key = None
+            lora_up_key = None
+
+            # Find lora_down and lora_up for this layer
+            for k in lora_dict.keys():
+                if layer_prefix in k:
+                    if "lora_down" in k:
+                        lora_down_key = k
+                    elif "lora_up" in k:
+                        lora_up_key = k
+
+            if lora_down_key is None or lora_up_key is None:
+                return  # No LoRA for this layer
+
+            lora_down_packed = lora_dict[lora_down_key]
+            lora_up_packed = lora_dict[lora_up_key]
+
+            device = linear_layer.proj_down.device
+            dtype = linear_layer.proj_down.dtype
+
+            # The LoRA weights are already merged with original low-rank branches in the converter
+            # Just directly apply them
+            old_rank = linear_layer.rank
+
+            linear_layer.proj_down.data = lora_down_packed.to(device=device, dtype=dtype)
+            linear_layer.proj_up.data = lora_up_packed.to(device=device, dtype=dtype)
+
+            # Update rank based on the merged weights
+            new_rank = lora_down_packed.shape[1]
+            linear_layer.rank = new_rank
+
+            logger.debug(
+                f"  ✅ Applied LoRA to {layer_prefix}: rank {old_rank} → {new_rank}, "
+                f"proj_down shape={linear_layer.proj_down.shape}, "
+                f"proj_up shape={linear_layer.proj_up.shape}"
+            )
+
+        # Apply LoRA to each SVDQW4A4Linear layer in the network
+        for i, module in enumerate(self.net):
+            if isinstance(module, SVDQW4A4Linear):
+                apply_lora_to_linear(module, lora_dict, f"net.{i}")
+            elif isinstance(module, GELU) and hasattr(module, "proj") and isinstance(module.proj, SVDQW4A4Linear):
+                # For GELU with proj attribute
+                apply_lora_to_linear(module.proj, lora_dict, f"net.{i}.proj")
+
+    def restore_original_params(self):
+        """
+        Note: For Qwen Image, LoRA removal is handled by reloading the model.
+        There's no need to manually restore parameters since the converter
+        merges LoRA with the original low-rank branches.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug("  ℹ️  LoRA removal: reload model to restore original state")

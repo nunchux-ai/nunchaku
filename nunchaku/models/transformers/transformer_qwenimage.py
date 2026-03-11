@@ -21,7 +21,8 @@ from diffusers.models.transformers.transformer_qwenimage import (
 from diffusers.utils import logging as diffusers_logging
 from huggingface_hub import utils
 
-from ...utils import get_precision
+from ...lora.qwenimage import fuse_vectors, is_nunchaku_format, to_nunchaku
+from ...utils import get_precision, load_state_dict_in_safetensors
 from ..attention import NunchakuBaseAttention, NunchakuFeedForward
 from ..attention_processors.qwenimage import NunchakuQwenImageNaiveFA2Processor
 from ..linear import AWQW4A16Linear, SVDQW4A4Linear
@@ -154,6 +155,88 @@ class NunchakuQwenAttention(NunchakuBaseAttention):
             self.processor = NunchakuQwenImageNaiveFA2Processor()
         else:
             raise ValueError(f"Processor {processor} is not supported")
+
+    def update_lora_params(self, lora_dict: dict[str, torch.Tensor]):
+        """
+        Update LoRA parameters for the attention module.
+
+        This method directly replaces the low-rank projections (proj_down and proj_up)
+        with the merged LoRA weights, following the same approach as Flux implementation.
+
+        Parameters
+        ----------
+        lora_dict : dict[str, torch.Tensor]
+            Dictionary containing LoRA weights for this attention module.
+            Expected keys: 'to_qkv.lora_down', 'to_qkv.lora_up', etc.
+        """
+
+        # Helper function to apply LoRA to a SVDQW4A4Linear layer
+        def apply_lora_to_linear(linear_layer, lora_dict, layer_prefix):
+            lora_down_key = None
+            lora_up_key = None
+
+            # Find lora_down and lora_up for this layer
+            for k in lora_dict.keys():
+                if layer_prefix in k:
+                    if "lora_down" in k:
+                        lora_down_key = k
+                    elif "lora_up" in k:
+                        lora_up_key = k
+
+            if lora_down_key is None or lora_up_key is None:
+                return  # No LoRA for this layer
+
+            lora_down_packed = lora_dict[lora_down_key]
+            lora_up_packed = lora_dict[lora_up_key]
+
+            device = linear_layer.proj_down.device
+            dtype = linear_layer.proj_down.dtype
+            old_rank = linear_layer.rank
+
+            # The LoRA weights are already merged with original low-rank branches in the converter
+            # Just directly apply them
+            linear_layer.proj_down.data = lora_down_packed.to(device=device, dtype=dtype)
+            linear_layer.proj_up.data = lora_up_packed.to(device=device, dtype=dtype)
+
+            # Update rank based on the merged weights
+            new_rank = lora_down_packed.shape[1]
+            linear_layer.rank = new_rank
+
+            # Update original_rank for LoRA scaling (store the original rank from base model)
+            # The merged weights contain original low-rank branches + LoRA
+            # original_rank should be the rank from the base model, not the current rank
+            if not hasattr(linear_layer, "original_rank"):
+                # Calculate original_rank: current_rank - lora_rank = original_rank
+                # If we're applying LoRA for the first time, old_rank is the original rank
+                # If we're applying multiple LoRAs, we need to track the base model's original rank
+                linear_layer.original_rank = old_rank  # This is the rank before applying this LoRA
+
+            # NOTE: We do NOT call set_lora_strength() here because:
+            # 1. compose_lora already applies strength at weight level (with 2x amplification)
+            # 2. Calling set_lora_strength would apply strength again at CUDA level
+            # 3. This would result in strength being applied twice: (strength * 2.0)²
+            # This follows the Flux LoRA design pattern.
+
+        # Apply LoRA to each quantized linear layer
+        if isinstance(self.to_qkv, SVDQW4A4Linear):
+            apply_lora_to_linear(self.to_qkv, lora_dict, "to_qkv")
+
+        if isinstance(self.add_qkv_proj, SVDQW4A4Linear):
+            apply_lora_to_linear(self.add_qkv_proj, lora_dict, "add_qkv_proj")
+
+        if isinstance(self.to_out[0], SVDQW4A4Linear):
+            apply_lora_to_linear(self.to_out[0], lora_dict, "to_out")
+
+        if isinstance(self.to_add_out, SVDQW4A4Linear):
+            apply_lora_to_linear(self.to_add_out, lora_dict, "to_add_out")
+
+    def restore_original_params(self):
+        """
+        Note: For Qwen Image, LoRA removal is handled by reloading the model.
+        There's no need to manually restore parameters since the converter
+        merges LoRA with the original low-rank branches.
+        """
+        logger.debug("  ℹ️  LoRA removal: reload model to restore original state")
 
 
 class NunchakuQwenImageTransformerBlock(QwenImageTransformerBlock):
@@ -306,6 +389,57 @@ class NunchakuQwenImageTransformerBlock(QwenImageTransformerBlock):
 
         return encoder_hidden_states, hidden_states
 
+    def update_lora_params(self, lora_dict: dict[str, torch.Tensor]):
+        """
+        Update LoRA parameters for the transformer block.
+
+        This method handles LoRA weights for both image and text streams,
+        including modulation layers, attention, and MLP components.
+        It directly replaces the low-rank projections with merged weights.
+
+        Parameters
+        ----------
+        lora_dict : dict[str, torch.Tensor]
+            Dictionary containing LoRA weights for this block.
+        """
+        # Apply LoRA to attention (includes both image and text stream QKV/out projections)
+        if hasattr(self.attn, "update_lora_params"):
+            attn_lora = {k: v for k, v in lora_dict.items() if "attn" in k}
+            if attn_lora:
+                self.attn.update_lora_params(attn_lora)
+
+        # Apply LoRA to image stream MLP
+        if hasattr(self.img_mlp, "update_lora_params"):
+            img_mlp_lora = {k: v for k, v in lora_dict.items() if "img_mlp" in k}
+            if img_mlp_lora:
+                self.img_mlp.update_lora_params(img_mlp_lora)
+
+        # Apply LoRA to text stream MLP
+        if hasattr(self.txt_mlp, "update_lora_params"):
+            txt_mlp_lora = {k: v for k, v in lora_dict.items() if "txt_mlp" in k}
+            if txt_mlp_lora:
+                self.txt_mlp.update_lora_params(txt_mlp_lora)
+
+    def restore_original_params(self):
+        """
+        Restore original parameters for all components in this transformer block.
+        """
+        # Restore attention parameters
+        if hasattr(self.attn, "restore_original_params"):
+            self.attn.restore_original_params()
+
+        # Restore image MLP parameters
+        if hasattr(self.img_mlp, "restore_original_params"):
+            self.img_mlp.restore_original_params()
+
+        # Restore text MLP parameters
+        if hasattr(self.txt_mlp, "restore_original_params"):
+            self.txt_mlp.restore_original_params()
+
+        # Note: img_mod and txt_mod are AWQW4A16Linear layers (not SVDQW4A4Linear)
+        # They don't have low-rank branches, so LoRA is handled differently
+        # The bias terms are handled through fuse_vectors in the converter
+
 
 class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel, NunchakuModelLoaderMixin):
     """
@@ -334,6 +468,17 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel, NunchakuM
         self.offload = kwargs.pop("offload", False)
         self.offload_manager = None
         self._is_initialized = False
+
+        # LoRA support attributes (similar to Flux implementation)
+        self._unquantized_part_sd: dict[str, torch.Tensor] = {}
+        self._unquantized_part_loras: dict[str, torch.Tensor] = {}
+        self._quantized_part_sd: dict[str, torch.Tensor] = {}
+        self._quantized_part_vectors: dict[str, torch.Tensor] = {}
+
+        # ComfyUI LoRA related attributes
+        self.comfy_lora_meta_list = []
+        self.comfy_lora_sd_list = []
+
         super().__init__(*args, **kwargs)
 
     def _patch_model(self, **kwargs):
@@ -615,3 +760,178 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel, NunchakuM
                 warn("Skipping moving the model to GPU as offload is enabled", UserWarning)
                 return self
         return super(type(self), self).to(*args, **kwargs)
+
+    def _update_unquantized_part_lora_params(self, strength: float = 1):
+        """
+        Updates the unquantized part of the model with LoRA parameters for Qwen Image.
+
+        This method handles LoRA weights for the unquantized parts of the model,
+        including input embeddings and output projections.
+
+        Parameters
+        ----------
+        strength : float, optional
+            LoRA scaling strength (default: 1).
+        """
+        device = next(self.parameters()).device
+        new_state_dict = {}
+
+        for k in self._unquantized_part_sd.keys():
+            v = self._unquantized_part_sd[k]
+            v = v.to(device)
+            self._unquantized_part_sd[k] = v
+
+            if v.ndim == 1 and k in self._unquantized_part_loras:
+                # Handle bias terms
+                diff = strength * self._unquantized_part_loras[k]
+                if diff.shape[0] < v.shape[0]:
+                    diff = torch.cat(
+                        [diff, torch.zeros(v.shape[0] - diff.shape[0], device=device, dtype=v.dtype)], dim=0
+                    )
+                new_state_dict[k] = v + diff
+            elif v.ndim == 2 and k.replace(".weight", ".lora_B.weight") in self._unquantized_part_loras:
+                # Handle weight matrices with LoRA
+                lora_a = self._unquantized_part_loras[k.replace(".weight", ".lora_A.weight")]
+                lora_b = self._unquantized_part_loras[k.replace(".weight", ".lora_B.weight")]
+
+                if lora_a.shape[1] < v.shape[1]:
+                    lora_a = torch.cat(
+                        [
+                            lora_a,
+                            torch.zeros(lora_a.shape[0], v.shape[1] - lora_a.shape[1], device=device, dtype=v.dtype),
+                        ],
+                        dim=1,
+                    )
+                if lora_b.shape[0] < v.shape[0]:
+                    lora_b = torch.cat(
+                        [
+                            lora_b,
+                            torch.zeros(v.shape[0] - lora_b.shape[0], lora_b.shape[1], device=device, dtype=v.dtype),
+                        ],
+                        dim=0,
+                    )
+
+                diff = strength * (lora_b @ lora_a)
+                new_state_dict[k] = v + diff
+            else:
+                new_state_dict[k] = v
+
+        self.load_state_dict(new_state_dict, strict=True)
+
+    def update_lora_params(self, path_or_state_dict: str | dict[str, torch.Tensor], num_loras: int = 1):
+        """
+        Update the model with new LoRA parameters for Qwen Image.
+
+        Parameters
+        ----------
+        path_or_state_dict : str or dict
+            Path to a LoRA weights file or a state dict. The path supports:
+
+            - Local file path, e.g., ``"/path/to/your/lora.safetensors"``
+            - HuggingFace repo with file, e.g., ``"user/repo/lora.safetensors"``
+              (automatically downloaded and cached)
+        num_loras : int, optional
+            Number of LoRAs that were composed. If > 1, this is a composed LoRA.
+            Used to determine whether to merge with base model (default: 1).
+        """
+        if isinstance(path_or_state_dict, dict):
+            state_dict = {
+                k: v for k, v in path_or_state_dict.items()
+            }  # copy a new one to avoid modifying the original one
+        else:
+            state_dict = load_state_dict_in_safetensors(path_or_state_dict)
+
+        if not is_nunchaku_format(state_dict):
+            # Check if this is a composed LoRA
+            is_composed = num_loras > 1
+            
+            # For composed LoRAs, skip merging with base model to avoid double-merging
+            # The compose_lora function already concatenated the LoRAs correctly
+            state_dict = to_nunchaku(state_dict, base_sd=self._quantized_part_sd, skip_base_merge=is_composed)
+
+        # Separate unquantized and quantized parts
+        unquantized_part_loras = {}
+        for k, v in list(state_dict.items()):
+            device = next(self.parameters()).device
+            if "transformer_blocks" not in k:
+                unquantized_part_loras[k] = state_dict.pop(k).to(device)
+
+        if len(self._unquantized_part_loras) > 0 or len(unquantized_part_loras) > 0:
+            self._unquantized_part_loras = unquantized_part_loras
+            self._update_unquantized_part_lora_params(1)
+
+        # Handle quantized part vectors
+        quantized_part_vectors = {}
+        for k, v in list(state_dict.items()):
+            if v.ndim == 1:
+                quantized_part_vectors[k] = state_dict.pop(k)
+        if len(self._quantized_part_vectors) > 0 or len(quantized_part_vectors) > 0:
+            self._quantized_part_vectors = quantized_part_vectors
+            updated_vectors = fuse_vectors(quantized_part_vectors, self._quantized_part_sd, 1)
+            state_dict.update(updated_vectors)
+
+        # Apply LoRA to transformer blocks
+        for block in self.transformer_blocks:
+            if hasattr(block, "update_lora_params"):
+                block.update_lora_params(state_dict)
+
+    def restore_original_params(self):
+        """
+        Restore original parameters for all transformer blocks.
+        This method should be called when LoRA is no longer needed.
+        """
+        for block in self.transformer_blocks:
+            if hasattr(block, "restore_original_params"):
+                block.restore_original_params()
+
+    def set_lora_strength(self, strength: float = 1):
+        """
+        Sets the LoRA scaling strength for the model.
+
+        Note: This function can only be used with a single LoRA. For multiple LoRAs,
+        please fuse the LoRA scale into the weights.
+
+        Parameters
+        ----------
+        strength : float, optional
+            LoRA scaling strength (default: 1).
+
+        Note: This function will change the strength of all the LoRAs. So only use it when you only have a single LoRA.
+        """
+        # Set LoRA strength for all SVDQW4A4Linear layers in transformer blocks
+        from ..linear import SVDQW4A4Linear
+
+        for block in self.transformer_blocks:
+            # Set strength for all SVDQW4A4Linear layers in this block
+            for module in block.modules():
+                if isinstance(module, SVDQW4A4Linear):
+                    module.set_lora_strength(strength)
+
+        # Handle unquantized part (similar to Flux implementation)
+        if len(self._unquantized_part_loras) > 0:
+            self._update_unquantized_part_lora_params(strength)
+        if len(self._quantized_part_vectors) > 0:
+            vector_dict = fuse_vectors(self._quantized_part_vectors, self._quantized_part_sd, strength)
+            for block in self.transformer_blocks:
+                if hasattr(block, "update_lora_params"):
+                    block.update_lora_params(vector_dict)
+
+    def reset_lora(self):
+        """
+        Resets all LoRA parameters to their default state.
+        """
+        unquantized_part_loras = {}
+        if len(self._unquantized_part_loras) > 0 or len(unquantized_part_loras) > 0:
+            self._unquantized_part_loras = unquantized_part_loras
+            self._update_unquantized_part_lora_params(1)
+
+        state_dict = {k: v for k, v in self._quantized_part_sd.items() if "lora" in k}
+        quantized_part_vectors = {}
+        if len(self._quantized_part_vectors) > 0 or len(quantized_part_vectors) > 0:
+            self._quantized_part_vectors = quantized_part_vectors
+            updated_vectors = fuse_vectors(quantized_part_vectors, self._quantized_part_sd, 1)
+            state_dict.update(updated_vectors)
+
+        for block in self.transformer_blocks:
+            if hasattr(block, "update_lora_params"):
+                block.update_lora_params(state_dict)

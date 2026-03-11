@@ -132,6 +132,10 @@ class SVDQW4A4Linear(nn.Module):
 
         self.act_unsigned = act_unsigned
 
+        # LoRA strength support (similar to Flux implementation)
+        self.original_rank = rank  # Store original rank for LoRA scaling
+        self.lora_strength = 1.0  # LoRA scaling strength
+
     @classmethod
     def from_linear(cls, linear: nn.Linear, **kwargs):
         """
@@ -265,8 +269,77 @@ class SVDQW4A4Linear(nn.Module):
             alpha=self.wtscale,
             wcscales=self.wcscales,
             act_unsigned=self.act_unsigned,
+            lora_scales=self._get_lora_scales(),
         )
         return output
+
+    def set_lora_strength(self, strength: float):
+        """
+        Set LoRA scaling strength for this layer.
+
+        This method allows dynamic adjustment of LoRA strength, similar to Flux's setLoraScale.
+        The strength is applied only to the LoRA part (ranks beyond original_rank), while
+        the original low-rank branches remain at strength 1.0.
+
+        For W4A4 quantized models, we apply an amplification factor to compensate for
+        quantization precision loss, similar to how Flux handles this internally.
+
+        Parameters
+        ----------
+        strength : float
+            LoRA scaling strength. 1.0 means full LoRA effect, 0.0 means no LoRA effect.
+        """
+        # If strength is 0, disable LoRA effect completely
+        if abs(strength) < 1e-6:
+            self.lora_strength = 0.0
+            print(
+                f"[DEBUG] set_lora_strength: rank={self.rank}, original_rank={self.original_rank}, "
+                f"input_strength={strength}, DISABLED (no LoRA effect)"
+            )
+            return
+
+        # Apply amplification factor for W4A4 quantized models
+        # This compensates for quantization precision loss
+        AMPLIFICATION_FACTOR = 2.0  # Empirically determined factor for W4A4
+
+        amplified_strength = strength * AMPLIFICATION_FACTOR
+        self.lora_strength = amplified_strength
+
+        print(
+            f"[DEBUG] set_lora_strength: rank={self.rank}, original_rank={self.original_rank}, "
+            f"input_strength={strength}, amplified_strength={amplified_strength}"
+        )
+
+    def _get_lora_scales(self) -> list[float]:
+        """
+        Get LoRA scaling factors for CUDA kernel.
+
+        Returns
+        -------
+        list[float]
+            Scaling factors for each 16-rank group.
+            Original ranks (up to original_rank): 1.0
+            LoRA ranks (beyond original_rank): lora_strength
+        """
+        import math
+
+        # Calculate number of 16-rank groups
+        total_groups = math.ceil(self.rank / 16)
+        original_groups = math.ceil(self.original_rank / 16)
+
+        # Build scales: original ranks = 1.0, LoRA ranks = lora_strength
+        lora_scales = []
+        for i in range(total_groups):
+            if i < original_groups:
+                lora_scales.append(1.0)  # Original low-rank branches
+            else:
+                lora_scales.append(self.lora_strength)  # LoRA weights
+
+        # Debug output (disabled for cleaner logs)
+        # print(f"[DEBUG] _get_lora_scales: rank={self.rank}, original_rank={self.original_rank}, "
+        #       f"lora_strength={self.lora_strength}, scales={lora_scales}")
+
+        return lora_scales
 
     def __repr__(self):
         return (
