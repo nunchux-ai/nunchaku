@@ -482,7 +482,9 @@ def patch_qwen_runtime_linears(
             continue
         if not isinstance(target, nn.Linear):
             raise TypeError(f"Expected `{module_name}` to be nn.Linear, got {type(target)}")
-        qmodule = W4Linear.from_linear(target, group_size=group_size, init_only=True, dtype=linear_dtype)
+        if linear_dtype is not None and target.weight.dtype != linear_dtype:
+            target.weight.data = target.weight.data.to(dtype=linear_dtype)
+        qmodule = W4Linear.from_linear(target, group_size=group_size, init_only=True)
         _replace_child_module(module, module_name, qmodule)
     if missing:
         raise RuntimeError(
