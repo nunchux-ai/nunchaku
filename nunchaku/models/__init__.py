@@ -2,11 +2,7 @@ from .text_encoders.t5_encoder import NunchakuT5EncoderModel
 from .text_encoders.qwen_encoder import NunchakuQwenEncoderModel
 from .text_encoders.qwen2_vl_edit_encoder import NunchakuQwen2VLEditEncoderModel
 from .text_encoders.qwen2_vl_text_encoder import NunchakuQwen2VLTextEncoderModel
-
-try:
-    from .text_encoders.qwen3_text_encoder import NunchakuQwen3TextEncoderModel
-except ImportError:
-    NunchakuQwen3TextEncoderModel = None  # type: ignore[assignment]
+from .text_encoders.qwen3_text_encoder import NunchakuQwen3TextEncoderModel
 
 from .transformers import (
     NunchakuFluxTransformer2dModel,
