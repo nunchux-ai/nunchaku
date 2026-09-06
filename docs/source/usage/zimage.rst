@@ -9,7 +9,7 @@ The following is the example of running Nunchaku version of Z-Image text-to-imag
 
       .. literalinclude:: ../../../examples/v1/z-image-turbo.py
          :language: python
-         :caption: Running Z-Image-Turbo (`examples/v1/z-image-turbo.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/z-image-turbo.py>`__)
+         :caption: Running Z-Image-Turbo (`examples/v1/z-image-turbo.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/z-image-turbo.py>`__)
          :linenos:
 
 

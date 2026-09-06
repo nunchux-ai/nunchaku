@@ -67,7 +67,7 @@ jobs:
           which python
           cd ..
           rm -rf ComfyUI-nunchaku
-          git clone -b dev https://github.com/mit-han-lab/ComfyUI-nunchaku.git
+          git clone -b dev https://github.com/nunchux-ai/ComfyUI-nunchaku.git
           cd ComfyUI-nunchaku
           uv pip install --torch-backend=auto -e ".[ci]"
           cd ..

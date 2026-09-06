@@ -6,7 +6,7 @@ This feature is fully compatible with `Diffusers <diffusers_repo>`_ offload mech
 
 .. literalinclude:: ../../../examples/flux.1-dev-offload.py
    :language: python
-   :caption: Running FLUX.1-dev with CPU Offload (`examples/flux.1-dev-offload.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-offload.py>`__)
+   :caption: Running FLUX.1-dev with CPU Offload (`examples/flux.1-dev-offload.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-offload.py>`__)
    :linenos:
    :emphasize-lines: 9, 13, 14
 

@@ -13,7 +13,7 @@ Nunchaku offers an API compatible with `Diffusers <github_diffusers_>`_, allowin
 
 .. literalinclude:: ../../../examples/v1/qwen-image.py
     :language: python
-    :caption: Running Qwen-Image (`examples/v1/qwen-image.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/qwen-image.py>`__)
+    :caption: Running Qwen-Image (`examples/v1/qwen-image.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/qwen-image.py>`__)
     :linenos:
 
 When using Nunchaku, replace the standard ``QwenImageTransformer2dModel`` with :class:`~nunchaku.models.transformers.transformer_qwenimage.NunchakuQwenImageTransformer2DModel`.
@@ -34,7 +34,7 @@ See the example script below:
 
 .. literalinclude:: ../../../examples/v1/qwen-image-lightning.py
     :language: python
-    :caption: Running Qwen-Image-Lightning (`examples/v1/qwen-image-lightning.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/qwen-image-lightning.py>`__)
+    :caption: Running Qwen-Image-Lightning (`examples/v1/qwen-image-lightning.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/qwen-image-lightning.py>`__)
     :linenos:
 
 Custom LoRA support is under development.

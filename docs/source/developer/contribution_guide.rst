@@ -1,4 +1,4 @@
-.. Adapting from https://docs.sglang.ai/references/contribution_guide.html
+.. Adapting from https://docs.sglang.ai/developer_guide/contribution_guide.html
 
 Contribution Guide
 ==================
@@ -97,7 +97,7 @@ To test visual output correctness, you can:
 3. **Compute similarity:**
    Evaluate the similarity between your outputs and the reference images
    using the `LPIPS <https://arxiv.org/abs/1801.03924>`_ metric.
-   Use the ``compute_lpips`` function provided in `tests/flux/utils.py <https://github.com/nunchaku-tech/nunchaku/blob/main/tests/flux/utils.py>`_:
+   Use the ``compute_lpips`` function provided in `tests/flux/utils.py <https://github.com/nunchux-ai/nunchaku/blob/main/tests/flux/utils.py>`_:
 
    .. code-block:: python
 

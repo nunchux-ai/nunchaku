@@ -7,7 +7,7 @@ body:
     attributes:
       label: Checklist
       options:
-        - label: 1. If the issue you raised is not a feature but a question, please raise a discussion at https://github.com/mit-han-lab/nunchaku/discussions/new/choose. Otherwise, it will be closed.
+        - label: 1. If the issue you raised is not a feature but a question, please raise a discussion at https://github.com/nunchux-ai/nunchaku/discussions/new/choose. Otherwise, it will be closed.
         - label: 2. I will do my best to describe the issue in English.
   - type: textarea
     attributes:

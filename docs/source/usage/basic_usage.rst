@@ -10,14 +10,14 @@ Nunchaku provides the same API as `Diffusers <github_diffusers_>`_, so you can u
 
       .. literalinclude:: ../../../examples/flux.1-dev.py
          :language: python
-         :caption: Running FLUX.1-dev (`examples/flux.1-dev.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev.py>`__)
+         :caption: Running FLUX.1-dev (`examples/flux.1-dev.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev.py>`__)
          :linenos:
 
    .. tab:: Turing GPUs (e.g., RTX 20 series)
 
       .. literalinclude:: ../../../examples/flux.1-dev-turing.py
          :language: python
-         :caption: Running FLUX.1-dev on Turing GPUs (`examples/flux.1-dev-turing.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-turing.py>`__)
+         :caption: Running FLUX.1-dev on Turing GPUs (`examples/flux.1-dev-turing.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-turing.py>`__)
          :linenos:
 
 The key difference when using Nunchaku is replacing the standard ``FluxTransformer2dModel``

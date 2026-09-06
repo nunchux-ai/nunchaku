@@ -112,7 +112,7 @@ Example (for Python 3.11 + PyTorch 2.7):
 
 .. code-block:: bat
 
-   "G:\ComfyUI\python\python.exe" -m pip install https://github.com/nunchaku-tech/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl
+   "G:\ComfyUI\python\python.exe" -m pip install https://github.com/nunchux-ai/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl
 
 To verify the installation:
 
@@ -142,7 +142,7 @@ Step 2: Clone the Repository
 
 .. code-block:: bat
 
-   git clone --recurse-submodules https://github.com/nunchaku-tech/nunchaku.git
+   git clone --recurse-submodules https://github.com/nunchux-ai/nunchaku.git
    cd nunchaku
 
 Step 3: Set Up Visual Studio Environment
@@ -199,7 +199,7 @@ Clone the `ComfyUI-nunchaku <github_comfyui-nunchaku_>`_ plugin into the ``custo
 .. code-block:: bat
 
    cd ComfyUI/custom_nodes
-   git clone https://github.com/nunchaku-tech/ComfyUI-nunchaku.git
+   git clone https://github.com/nunchux-ai/ComfyUI-nunchaku.git
 
 Alternatively, install it using `ComfyUI-Manager <github_comfyui-manager_>`_ or `comfy-cli <github_comfy-cli_>`_.
 

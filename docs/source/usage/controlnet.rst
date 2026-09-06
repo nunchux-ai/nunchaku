@@ -27,28 +27,28 @@ Refer to the following examples for detailed implementation guidance.
 
       .. literalinclude:: ../../../examples/flux.1-canny-dev.py
          :language: python
-         :caption: Running FLUX.1-Canny-Dev (`examples/flux.1-canny-dev.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-canny-dev.py>`__)
+         :caption: Running FLUX.1-Canny-Dev (`examples/flux.1-canny-dev.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-canny-dev.py>`__)
          :linenos:
 
    .. tab:: FLUX.1-Depth-Dev
 
       .. literalinclude:: ../../../examples/flux.1-depth-dev.py
          :language: python
-         :caption: Running FLUX.1-Depth-Dev (`examples/flux.1-depth-dev.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-depth-dev.py>`__)
+         :caption: Running FLUX.1-Depth-Dev (`examples/flux.1-depth-dev.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-depth-dev.py>`__)
          :linenos:
 
    .. tab:: FLUX.1-Fill-Dev
 
       .. literalinclude:: ../../../examples/flux.1-fill-dev.py
          :language: python
-         :caption: Running FLUX.1-Fill-Dev (`examples/flux.1-fill-dev.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-fill-dev.py>`__)
+         :caption: Running FLUX.1-Fill-Dev (`examples/flux.1-fill-dev.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-fill-dev.py>`__)
          :linenos:
 
    .. tab:: FLUX.1-Redux-Dev
 
       .. literalinclude:: ../../../examples/flux.1-redux-dev.py
          :language: python
-         :caption: Running FLUX.1-Redux-Dev (`examples/flux.1-redux-dev.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-redux-dev.py>`__)
+         :caption: Running FLUX.1-Redux-Dev (`examples/flux.1-redux-dev.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-redux-dev.py>`__)
          :linenos:
 
 FLUX.1-tools LoRAs
@@ -64,14 +64,14 @@ requiring only the ``FluxControlPipeline`` for the target model.
 
       .. literalinclude:: ../../../examples/flux.1-canny-dev-lora.py
          :language: python
-         :caption: Running FLUX.1-Canny-Dev-LoRA (`examples/flux.1-canny-dev-lora.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-canny-dev-lora.py>`__)
+         :caption: Running FLUX.1-Canny-Dev-LoRA (`examples/flux.1-canny-dev-lora.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-canny-dev-lora.py>`__)
          :linenos:
 
    .. tab:: FLUX.1-Depth-Dev
 
       .. literalinclude:: ../../../examples/flux.1-depth-dev-lora.py
          :language: python
-         :caption: Running FLUX.1-Depth-Dev-LoRA (`examples/flux.1-depth-dev-lora.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-depth-dev-lora.py>`__)
+         :caption: Running FLUX.1-Depth-Dev-LoRA (`examples/flux.1-depth-dev-lora.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-depth-dev-lora.py>`__)
          :linenos:
 
 ControlNet-Union-Pro
@@ -87,7 +87,7 @@ The following example demonstrates running `ControlNet-Union-Pro <hf_cn-union-pr
 
 .. literalinclude:: ../../../examples/flux.1-dev-controlnet-union-pro.py
    :language: python
-   :caption: Running ControlNet-Union-Pro (`examples/flux.1-dev-controlnet-union-pro.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-controlnet-union-pro.py>`__)
+   :caption: Running ControlNet-Union-Pro (`examples/flux.1-dev-controlnet-union-pro.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-controlnet-union-pro.py>`__)
    :linenos:
 
 Usage for `ControlNet-Union-Pro2 <hf_cn-union-pro2_>`_ is similar.

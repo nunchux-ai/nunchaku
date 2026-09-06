@@ -14,7 +14,7 @@ Below is an example of running FLUX.1-dev with `Ghibsky <hf_lora_ghibsky_>`_ LoR
 
 .. literalinclude:: ../../../examples/flux.1-dev-lora.py
    :language: python
-   :caption: Running FLUX.1-dev with `Ghibsky <hf_lora_ghibsky_>`_  LoRA (`examples/flux.1-dev-lora.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-lora.py>`__)
+   :caption: Running FLUX.1-dev with `Ghibsky <hf_lora_ghibsky_>`_  LoRA (`examples/flux.1-dev-lora.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-lora.py>`__)
    :linenos:
    :emphasize-lines: 16-19
 
@@ -43,7 +43,7 @@ The following example demonstrates how to compose and load multiple LoRAs:
 
 .. literalinclude:: ../../../examples/flux.1-dev-multiple-lora.py
    :language: python
-   :caption: Running FLUX.1-dev with `Ghibsky <hf_lora_ghibsky_>`_ and `FLUX-Turbo <hf_lora_flux-turbo_>`_ LoRA (`examples/flux.1-dev-multiple-lora.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-multiple-lora.py>`__)
+   :caption: Running FLUX.1-dev with `Ghibsky <hf_lora_ghibsky_>`_ and `FLUX-Turbo <hf_lora_flux-turbo_>`_ LoRA (`examples/flux.1-dev-multiple-lora.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-multiple-lora.py>`__)
    :linenos:
    :emphasize-lines: 17-23
 

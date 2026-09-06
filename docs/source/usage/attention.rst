@@ -6,7 +6,7 @@ and 50-series GPUs compared to FlashAttention-2, without precision loss.
 
 .. literalinclude:: ../../../examples/flux.1-dev-fp16attn.py
    :language: python
-   :caption: Running FLUX.1-dev with FP16 Attention (`examples/flux.1-dev-fp16attn.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-fp16attn.py>`__)
+   :caption: Running FLUX.1-dev with FP16 Attention (`examples/flux.1-dev-fp16attn.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-fp16attn.py>`__)
    :linenos:
    :emphasize-lines: 11
 

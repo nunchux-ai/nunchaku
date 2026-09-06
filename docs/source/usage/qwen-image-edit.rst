@@ -10,7 +10,7 @@ Nunchaku offers an API compatible with `Diffusers <github_diffusers_>`_, allowin
 
 .. literalinclude:: ../../../examples/v1/qwen-image-edit.py
     :language: python
-    :caption: Running Qwen-Image-Edit (`examples/v1/qwen-image-edit.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/qwen-image-edit.py>`__)
+    :caption: Running Qwen-Image-Edit (`examples/v1/qwen-image-edit.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/qwen-image-edit.py>`__)
     :linenos:
 
 When using Nunchaku, replace the standard ``QwenImageTransformer2dModel`` with :class:`~nunchaku.models.transformers.transformer_qwenimage.NunchakuQwenImageTransformer2DModel`.
@@ -31,7 +31,7 @@ See the example script below:
 
 .. literalinclude:: ../../../examples/v1/qwen-image-edit-lightning.py
     :language: python
-    :caption: Running Qwen-Image-Edit-Lightning (`examples/v1/qwen-image-edit-lightning.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/qwen-image-edit-lightning.py>`__)
+    :caption: Running Qwen-Image-Edit-Lightning (`examples/v1/qwen-image-edit-lightning.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/qwen-image-edit-lightning.py>`__)
     :linenos:
 
 Qwen-Image-Edit-2509
@@ -45,7 +45,7 @@ Below is a minimal example for running the 4-bit quantized `Qwen-Image-Edit-2509
 
 .. literalinclude:: ../../../examples/v1/qwen-image-edit-2509.py
     :language: python
-    :caption: Running Qwen-Image-Edit-2509 (`examples/v1/qwen-image-edit-2509.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/qwen-image-edit-2509.py>`__)
+    :caption: Running Qwen-Image-Edit-2509 (`examples/v1/qwen-image-edit-2509.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/qwen-image-edit-2509.py>`__)
     :linenos:
 
 .. note::
@@ -61,5 +61,5 @@ See the example script below:
 
 .. literalinclude:: ../../../examples/v1/qwen-image-edit-2509-lightning.py
     :language: python
-    :caption: Running Qwen-Image-Edit-2509-Lightning (`examples/v1/qwen-image-edit-2509-lightning.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/qwen-image-edit-2509-lightning.py>`__)
+    :caption: Running Qwen-Image-Edit-2509-Lightning (`examples/v1/qwen-image-edit-2509-lightning.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/qwen-image-edit-2509-lightning.py>`__)
     :linenos:

@@ -287,7 +287,7 @@ class NunchakuSDXLTransformerBlock(BasicTransformerBlock):
 
 
 class NunchakuSDXLShiftedConv2d(nn.Module):
-    # Adapted from https://github.com/nunchaku-tech/deepcompressor/blob/main/deepcompressor/nn/patch/conv.py#ShiftedConv2d
+    # Adapted from https://github.com/nunchux-ai/deepcompressor/blob/main/deepcompressor/nn/patch/conv.py#ShiftedConv2d
     def __init__(
         self,
         orig_in_channels,
@@ -341,7 +341,7 @@ class NunchakuSDXLShiftedConv2d(nn.Module):
 
 
 class NunchakuSDXLConcatShiftedConv2d(nn.Module):
-    # Adapted from https://github.com/nunchaku-tech/deepcompressor/blob/main/deepcompressor/nn/patch/conv.py#ConcatConv2d
+    # Adapted from https://github.com/nunchux-ai/deepcompressor/blob/main/deepcompressor/nn/patch/conv.py#ConcatConv2d
     def __init__(self, orig_conv: nn.Conv2d, split: int):
         super().__init__()
         splits = [split, orig_conv.in_channels - split] if orig_conv.in_channels - split > 0 else [split]

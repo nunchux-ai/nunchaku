@@ -31,7 +31,7 @@ Once PyTorch is installed, you can install ``nunchaku`` from one of the followin
 
 .. code-block:: shell
 
-    pip install https://github.com/nunchaku-tech/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl
+    pip install https://github.com/nunchux-ai/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl
 
 Make sure to replace each version number with the correct one for your environment. `cp311` stands for python version 3.11.x. You can find your own python version using
 
@@ -79,7 +79,7 @@ To find the correct Python path:
 
    .. code-block:: bat
 
-       "G:\ComfyUI\python\python.exe" -m pip install https://github.com/nunchaku-tech/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl
+       "G:\ComfyUI\python\python.exe" -m pip install https://github.com/nunchux-ai/nunchaku/releases/download/v0.3.1/nunchaku-0.3.1+torch2.7-cp311-cp311-linux_x86_64.whl
 
 For Blackwell GPUs (50-series)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -147,7 +147,7 @@ See :doc:`Window Setup Guide <setup_windows>` for more details.
 
 .. code-block:: shell
 
-    git clone --recurse-submodules https://github.com/nunchaku-tech/nunchaku.git
+    git clone --recurse-submodules https://github.com/nunchux-ai/nunchaku.git
     cd nunchaku
 
 **Build and Install:**

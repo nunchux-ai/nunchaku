@@ -1,19 +1,19 @@
 <div align="center" id="nunchaku_logo">
-  <img src="https://huggingface.co/datasets/nunchaku-ai/cdn/resolve/main/logo/v2/nunchaku-compact-transparent.png" alt="logo" width="220"></img>
+  <img src="https://www.nunchux.ai/Logo.svg" alt="logo" width="220"></img>
 </div>
 <h3 align="center">
-<a href="http://arxiv.org/abs/2411.05007"><b>Paper</b></a> | <a href="https://nunchaku.tech/docs/nunchaku/"><b>Docs</b></a> | <a href="https://hanlab.mit.edu/projects/svdquant"><b>Website</b></a> | <a href="https://hanlab.mit.edu/blog/svdquant"><b>Blog</b></a> | <a href="https://demo.nunchaku.tech/"><b>Demo</b></a> | <a href="https://huggingface.co/nunchaku-ai"><b>Hugging Face</b></a> | <a href="https://modelscope.cn/organization/nunchaku-tech"><b>ModelScope</b></a> | <a href="https://github.com/nunchaku-ai/ComfyUI-nunchaku"><b>ComfyUI</b></a>
+<a href="http://arxiv.org/abs/2411.05007"><b>Paper</b></a> | <a href="https://nunchaku.tech/docs/nunchaku/"><b>Docs</b></a> | <a href="https://hanlab.mit.edu/projects/svdquant"><b>Website</b></a> | <a href="https://hanlab.mit.edu/blog/svdquant"><b>Blog</b></a> | <a href="https://nunchux.ai/"><b>Demo</b></a> | <a href="https://huggingface.co/nunchaku-ai"><b>Hugging Face</b></a> | <a href="https://modelscope.cn/organization/nunchaku-tech"><b>ModelScope</b></a> | <a href="https://github.com/nunchux-ai/ComfyUI-nunchaku"><b>ComfyUI</b></a>
 </h3>
 <div align="center">
-  <a href="https://trendshift.io/repositories/13942" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13942" alt="nunchaku-ai/nunchaku | Trendshift" style="width: 120px; height: 26px;" width="120" height="26"/></a>
+  <a href="https://trendshift.io/repositories/20447" target="_blank"><img src="https://trendshift.io/api/badge/repositories/20447" alt="nunchux-ai/nunchaku | Trendshift" style="width: 120px; height: 26px;" width="120" height="26"/></a>
   <a href=https://discord.gg/Wk6PnwX9Sm target="_blank"><img src=https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FWk6PnwX9Sm%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord&color=green&suffix=%20total height=22px></a>
   <a href=https://huggingface.co/datasets/nunchaku-ai/cdn/resolve/main/nunchaku/assets/wechat.jpg target="_blank"><img src=https://img.shields.io/badge/WeChat-07C160?logo=wechat&logoColor=white height=22px></a>
-  <a href=https://deepwiki.com/nunchaku-ai/nunchaku target="_blank"><img src=https://deepwiki.com/badge.svg height=22px></a>
+  <a href=https://deepwiki.com/nunchux-ai/nunchaku target="_blank"><img src=https://deepwiki.com/badge.svg height=22px></a>
 </div>
 
-**Nunchaku** is a high-performance inference engine optimized for 4-bit neural networks, as introduced in our paper [SVDQuant](http://arxiv.org/abs/2411.05007). For the underlying quantization library, check out [DeepCompressor](https://github.com/nunchaku-ai/deepcompressor).
+**Nunchaku** is a high-performance inference engine optimized for 4-bit neural networks, as introduced in our paper [SVDQuant](http://arxiv.org/abs/2411.05007). For the underlying quantization library, check out [DeepCompressor](https://github.com/nunchux-ai/deepcompressor).
 
-Join our user groups on [**Discord**](https://discord.gg/Wk6PnwX9Sm) and [**WeChat**](https://huggingface.co/datasets/nunchaku-ai/cdn/resolve/main/nunchaku/assets/wechat.jpg) to engage in discussions with the community! More details can be found [here](https://github.com/nunchaku-ai/nunchaku/issues/149). If you have any questions, run into issues, or are interested in contributing, don’t hesitate to reach out!
+Join our user groups on [**Discord**](https://discord.gg/Wk6PnwX9Sm) and [**WeChat**](https://huggingface.co/datasets/nunchaku-ai/cdn/resolve/main/nunchaku/assets/wechat.jpg) to engage in discussions with the community! More details can be found [here](https://github.com/nunchux-ai/nunchaku/issues/149). If you have any questions, run into issues, or are interested in contributing, don’t hesitate to reach out!
 
 ## News
 
@@ -26,26 +26,26 @@ Join our user groups on [**Discord**](https://discord.gg/Wk6PnwX9Sm) and [**WeCh
 <summary>More</summary>
 
 - **[2025-09-09]** 🔥 Released [**4-bit Qwen-Image-Edit**](https://huggingface.co/Qwen/Qwen-Image-Edit) together with the [4/8-step Lightning](https://huggingface.co/lightx2v/Qwen-Image-Lightning) variants! Models are available on [Hugging Face](https://huggingface.co/nunchaku-ai/nunchaku-qwen-image-edit). Try them out with our [example script](examples/v1/qwen-image-edit.py).
-- **[2025-09-04]** 🚀 Official release of **Nunchaku v1.0.0**! Qwen-Image now supports **asynchronous offloading**, reducing VRAM usage to as little as **3 GiB** with no performance loss. Check out the [tutorial](https://nunchaku.tech/docs/nunchaku/usage/qwenimage.html) to get started.
+- **[2025-09-04]** 🚀 Official release of **Nunchaku v1.0.0**! Qwen-Image now supports **asynchronous offloading**, reducing VRAM usage to as little as **3 GiB** with no performance loss. Check out the [tutorial](https://nunchaku.tech/docs/nunchaku/usage/qwen-image.html) to get started.
 - **[2025-08-27]** 🔥 Release **4-bit [4/8-step lightning Qwen-Image](https://huggingface.co/lightx2v/Qwen-Image-Lightning)**! Download on [Hugging Face](https://huggingface.co/nunchaku-ai/nunchaku-qwen-image) or [ModelScope](https://modelscope.cn/models/nunchaku-tech/nunchaku-qwen-image), and try it with our [example script](examples/v1/qwen-image-lightning.py).
 - **[2025-08-15]** 🔥 Our **4-bit Qwen-Image** models are now live on [Hugging Face](https://huggingface.co/nunchaku-ai/nunchaku-qwen-image)! Get started with our [example script](examples/v1/qwen-image.py). *ComfyUI, LoRA, and CPU offloading support are coming soon!*
 - **[2025-08-15]** 🚀 The **Python backend** is now available! Explore our Pythonic FLUX models [here](nunchaku/models/transformers/transformer_flux_v2.py) and see the modular **4-bit linear layer** [here](nunchaku/models/linear.py).
 - **[2025-07-31]** 🚀 **[FLUX.1-Krea-dev](https://www.krea.ai/blog/flux-krea-open-source-release) is now supported!** Check out our new [example script](./examples/flux.1-krea-dev.py) to get started.
 - **[2025-07-13]** 🚀 The official [**Nunchaku documentation**](https://nunchaku.tech/docs/nunchaku/) is now live! Explore comprehensive guides and resources to help you get started.
-- **[2025-06-29]** 🔥 Support **FLUX.1-Kontext**! Try out our [example script](./examples/flux.1-kontext-dev.py) to see it in action! Our demo is available at this [link](https://svdquant.mit.edu/kontext/)!
+- **[2025-06-29]** 🔥 Support **FLUX.1-Kontext**! Try out our [example script](./examples/flux.1-kontext-dev.py) to see it in action! Our demo is available at this [link](https://nunchux.ai/)!
 - **[2025-06-01]** 🚀 **Release v0.3.0!** This update adds support for multiple-batch inference, [**ControlNet-Union-Pro 2.0**](https://huggingface.co/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0), initial integration of [**PuLID**](https://github.com/ToTheBeginning/PuLID), and introduces [**Double FB Cache**](examples/flux.1-dev-double_cache.py). You can now load Nunchaku FLUX models as a single file, and our upgraded [**4-bit T5 encoder**](https://huggingface.co/nunchaku-ai/nunchaku-t5) now matches **FP8 T5** in quality!
 - **[2025-04-16]** 🎥 Released tutorial videos in both [**English**](https://youtu.be/YHAVe-oM7U8?si=cM9zaby_aEHiFXk0) and [**Chinese**](https://www.bilibili.com/video/BV1BTocYjEk5/?share_source=copy_web&vd_source=8926212fef622f25cc95380515ac74ee) to assist installation and usage.
-- **[2025-04-09]** 📢 Published the [April roadmap](https://github.com/nunchaku-ai/nunchaku/issues/266) and an [FAQ](https://github.com/nunchaku-ai/nunchaku/discussions/262) to help the community get started and stay up to date with Nunchaku’s development.
+- **[2025-04-09]** 📢 Published the [April roadmap](https://github.com/nunchux-ai/nunchaku/issues/266) and an [FAQ](https://github.com/nunchux-ai/nunchaku/discussions/262) to help the community get started and stay up to date with Nunchaku’s development.
 - **[2025-04-05]** 🚀 **Nunchaku v0.2.0 released!** This release brings [**multi-LoRA**](examples/flux.1-dev-multiple-lora.py) and [**ControlNet**](examples/flux.1-dev-controlnet-union-pro.py) support with even faster performance powered by [**FP16 attention**](#fp16-attention) and [**First-Block Cache**](#first-block-cache). We've also added compatibility for [**20-series GPUs**](examples/flux.1-dev-turing.py) — Nunchaku is now more accessible than ever!
 - **[2025-03-07]** 🚀 **Nunchaku v0.1.4 Released!** We've supported [4-bit text encoder and per-layer CPU offloading](#Low-Memory-Inference), reducing FLUX's minimum memory requirement to just **4 GiB** while maintaining a **2–3× speedup**. This update also fixes various issues related to resolution, LoRA, pin memory, and runtime stability. Check out the release notes for full details!
-- **[2025-02-20]** 🚀 **Support NVFP4 precision on NVIDIA RTX 5090!** NVFP4 delivers superior image quality compared to INT4, offering **~3× speedup** on the RTX 5090 over BF16. Learn more in our [blog](https://hanlab.mit.edu/blog/svdquant-nvfp4), checkout [`examples`](./examples) for usage and try [our demo](https://svdquant.mit.edu/flux1-schnell/) online!
+- **[2025-02-20]** 🚀 **Support NVFP4 precision on NVIDIA RTX 5090!** NVFP4 delivers superior image quality compared to INT4, offering **~3× speedup** on the RTX 5090 over BF16. Learn more in our [blog](https://hanlab.mit.edu/blog/svdquant-nvfp4), checkout [`examples`](./examples) for usage and try [our demo](https://nunchux.ai/) online!
 - **[2025-02-18]** 🔥 [**Customized LoRA conversion**](#Customized-LoRA) and [**model quantization**](#Customized-Model-Quantization) instructions are now available! **[ComfyUI](./comfyui)** workflows now support **customized LoRA**, along with **FLUX.1-Tools**!
-- **[2025-02-11]** 🎉 **[SVDQuant](http://arxiv.org/abs/2411.05007) has been selected as a ICLR 2025 Spotlight! FLUX.1-tools Gradio demos are now available!** Check [here](#gradio-demos) for the usage details! Our new [depth-to-image demo](https://svdquant.mit.edu/flux1-depth-dev/) is also online—try it out!
+- **[2025-02-11]** 🎉 **[SVDQuant](http://arxiv.org/abs/2411.05007) has been selected as a ICLR 2025 Spotlight! FLUX.1-tools Gradio demos are now available!** Check [here](#gradio-demos) for the usage details! Our new [depth-to-image demo](https://nunchux.ai/) is also online—try it out!
 - **[2025-02-04]** **🚀 4-bit [FLUX.1-tools](https://blackforestlabs.ai/flux-1-tools/) is here!** Enjoy a **2-3× speedup** over the original models. Check out the [examples](./examples) for usage. **ComfyUI integration is coming soon!**
-- **[2025-01-23]** 🚀 **4-bit [SANA](https://nvlabs.github.io/Sana/) support is here!** Experience a 2-3× speedup compared to the 16-bit model. Check out the [usage example](examples/sana1.6b_pag.py) and the [deployment guide](app/sana/t2i) for more details. Explore our live demo at [svdquant.mit.edu](https://svdquant.mit.edu)!
+- **[2025-01-23]** 🚀 **4-bit [SANA](https://nvlabs.github.io/Sana/) support is here!** Experience a 2-3× speedup compared to the 16-bit model. Check out the [usage example](examples/sana1.6b_pag.py) and the [deployment guide](app/sana/t2i) for more details. Explore our live demo at [nunchux.ai](https://nunchux.ai/)!
 - **[2025-01-22]** 🎉 [**SVDQuant**](http://arxiv.org/abs/2411.05007) has been accepted to **ICLR 2025**!
-- **[2024-12-08]** Support [ComfyUI](https://github.com/comfyanonymous/ComfyUI). Please check [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) for the usage.
-- **[2024-11-07]** 🔥 Our latest **W4A4** Diffusion model quantization work [**SVDQuant**](https://hanlab.mit.edu/projects/svdquant) is publicly released! Check [**DeepCompressor**](https://github.com/nunchaku-ai/deepcompressor) for the quantization library.
+- **[2024-12-08]** Support [ComfyUI](https://github.com/comfyanonymous/ComfyUI). Please check [ComfyUI-nunchaku](https://github.com/nunchux-ai/ComfyUI-nunchaku) for the usage.
+- **[2024-11-07]** 🔥 Our latest **W4A4** Diffusion model quantization work [**SVDQuant**](https://hanlab.mit.edu/projects/svdquant) is publicly released! Check [**DeepCompressor**](https://github.com/nunchux-ai/deepcompressor) for the quantization library.
 
 </details>
 
@@ -78,9 +78,9 @@ https://github.com/user-attachments/assets/fdd4ab68-6489-4c65-8768-259bd866e8f8
 
 - [Installation Guide](https://nunchaku.tech/docs/nunchaku/installation/installation.html)
 - [Usage Tutorial](https://nunchaku.tech/docs/nunchaku/usage/basic_usage.html)
-- [ComfyUI Plugin: ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku)
-- [Custom Model Quantization: DeepCompressor](https://github.com/nunchaku-ai/deepcompressor)
-- [Gradio Demo Apps](https://github.com/nunchaku-ai/nunchaku/tree/main/app)
+- [ComfyUI Plugin: ComfyUI-nunchaku](https://github.com/nunchux-ai/ComfyUI-nunchaku)
+- [Custom Model Quantization: DeepCompressor](https://github.com/nunchux-ai/deepcompressor)
+- [Gradio Demo Apps](https://github.com/nunchux-ai/nunchaku/tree/main/app)
 - [Reproduce SVDQuant Paper Results](app/flux.1/t2i)
 - [API Reference](https://nunchaku.tech/docs/nunchaku/python_api/nunchaku.html)
 - [Contribution Guide](https://nunchaku.tech/docs/nunchaku/developer/contribution_guide.html)
@@ -119,7 +119,7 @@ If you find `nunchaku` useful or relevant to your research, please cite our pape
 
 ## Acknowledgments
 
-We thank MIT-IBM Watson AI Lab, MIT and Amazon Science Hub, MIT AI Hardware Program, National Science Foundation, Packard Foundation, Dell, LG, Hyundai, and Samsung for supporting this research. We thank NVIDIA for donating the DGX server. We thank [First Intelligence](https://www.first-intelligence.com/) and [Yotta Labs](https://www.yottalabs.ai/) for generously sponsoring our computing resources.
+We thank MIT-IBM Watson AI Lab, MIT and Amazon Science Hub, MIT AI Hardware Program, National Science Foundation, Packard Foundation, Dell, LG, Hyundai, and Samsung for supporting this research. We thank NVIDIA for donating the DGX server. We thank [Yotta Labs](https://www.yottalabs.ai/) for generously sponsoring our computing resources.
 
 We use [img2img-turbo](https://github.com/GaParmar/img2img-turbo) to train the sketch-to-image LoRA. Our text-to-image and image-to-image UI is built upon [playground-v.25](https://huggingface.co/spaces/playgroundai/playground-v2.5/blob/main/app.py) and [img2img-turbo](https://github.com/GaParmar/img2img-turbo/blob/main/gradio_sketch2image.py), respectively. Our safety checker is borrowed from [hart](https://github.com/mit-han-lab/hart).
 
@@ -127,4 +127,4 @@ Nunchaku is also inspired by many open-source libraries, including (but not limi
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=nunchaku-ai/nunchaku&type=Date)](https://www.star-history.com/#nunchaku-ai/nunchaku&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=nunchux-ai/nunchaku&type=Date)](https://www.star-history.com/#nunchux-ai/nunchaku&Date)

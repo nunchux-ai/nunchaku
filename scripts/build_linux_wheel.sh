@@ -1,5 +1,5 @@
 #!/bin/bash
-# Modified from https://github.com/sgl-project/sglang/blob/main/sgl-kernel/build.sh
+# Modified from https://github.com/sgl-project/sglang/blob/v0.4.10/sgl-kernel/build.sh
 set -ex
 PYTHON_VERSION=$1
 TORCH_VERSION=$2

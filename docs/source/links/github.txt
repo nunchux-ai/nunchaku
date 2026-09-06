@@ -1,10 +1,10 @@
-.. _github_deepcompressor: https://github.com/nunchaku-tech/deepcompressor
+.. _github_deepcompressor: https://github.com/nunchux-ai/deepcompressor
 .. _github_flux: https://github.com/black-forest-labs/flux
 .. _github_diffusers: https://github.com/huggingface/diffusers
-.. _github_comfyui-nunchaku: https://github.com/nunchaku-tech/ComfyUI-nunchaku
-.. _github_nunchaku: https://github.com/nunchaku-tech/nunchaku
-.. _github_nunchaku_releases: https://github.com/nunchaku-tech/nunchaku/releases
-.. _github_comfyui-nunchaku_example_workflows: https://github.com/nunchaku-tech/ComfyUI-nunchaku/tree/main/example_workflows
+.. _github_comfyui-nunchaku: https://github.com/nunchux-ai/ComfyUI-nunchaku
+.. _github_nunchaku: https://github.com/nunchux-ai/nunchaku
+.. _github_nunchaku_releases: https://github.com/nunchux-ai/nunchaku/releases
+.. _github_comfyui-nunchaku_example_workflows: https://github.com/nunchux-ai/ComfyUI-nunchaku/tree/main/example_workflows
 .. _github_comfyui-manager: https://github.com/Comfy-Org/ComfyUI-Manager
 .. _github_comfyui: https://github.com/comfyanonymous/ComfyUI
 .. _github_comfy-cli: https://github.com/Comfy-Org/comfy-cli

@@ -25,7 +25,7 @@ when input changes are minimal. Supports SANA and Flux architectures.
 
 .. note::
    Adapted from ParaAttention:
-   https://github.com/chengzeyi/ParaAttention/src/para_attn/first_block_cache/
+   https://github.com/chengzeyi/ParaAttention/tree/main/src/para_attn/first_block_cache/
 """
 
 import contextlib

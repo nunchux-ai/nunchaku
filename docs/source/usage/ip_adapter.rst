@@ -10,7 +10,7 @@ Nunchaku supports `IP Adapter <hf_ip-adapterv2_>`_, an adapter achieving image p
 
 .. literalinclude:: ../../../examples/flux.1-dev-IP-adapter.py
    :language: python
-   :caption: IP Adapter Example (`examples/flux.1-dev-IP-adapter.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-IP-adapter.py>`__)
+   :caption: IP Adapter Example (`examples/flux.1-dev-IP-adapter.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-IP-adapter.py>`__)
    :linenos:
 
 The IP Adapter integration in Nunchaku follows these main steps:

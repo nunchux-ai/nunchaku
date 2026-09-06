@@ -60,14 +60,14 @@ napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
 extlinks = {
-    "nunchaku_issue": ("https://github.com/nunchaku-tech/nunchaku/issues/%s", "nunchaku#%s"),
-    "comfyui-nunchaku_issue": ("https://github.com/nunchaku-tech/ComfyUI-nunchaku/issues/%s", "ComfyUI-nunchaku#%s"),
+    "nunchaku_issue": ("https://github.com/nunchux-ai/nunchaku/issues/%s", "nunchaku#%s"),
+    "comfyui-nunchaku_issue": ("https://github.com/nunchux-ai/ComfyUI-nunchaku/issues/%s", "ComfyUI-nunchaku#%s"),
 }
 
 html_favicon = "_static/nunchaku.ico"
 
 html_theme_options = {
-    "repository_url": "https://github.com/nunchaku-tech/nunchaku",
+    "repository_url": "https://github.com/nunchux-ai/nunchaku",
     "repository_branch": "main",
     "path_to_docs": "docs/source",
     "use_repository_button": True,

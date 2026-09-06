@@ -8,15 +8,15 @@ permissions:
 jobs:
   cherry-pick-commits:
     runs-on: ubuntu-latest
-    if: github.repository == 'nunchaku-ai/nunchaku'
+    if: github.repository == 'nunchux-ai/nunchaku'
     steps:
       - name: Clone private repository
         run: |
-          git clone -b oss https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/nunchaku-ai/nunchaku-dev.git
+          git clone -b oss https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/nunchux-ai/nunchaku-dev.git
       - name: Add public remote and fetch
         run: |
           cd nunchaku-dev
-          git remote add public https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/nunchaku-ai/nunchaku.git
+          git remote add public https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/nunchux-ai/nunchaku.git
           git fetch public main
       - name: Cherry-pick latest commit from public/main
         run: |

@@ -12,7 +12,7 @@ jobs:
   build-and-deploy-docs:
     name: Build and deploy docs
     runs-on: [self-hosted, build-docs]
-    if: github.repository == 'nunchaku-ai/nunchaku' && (github.event_name != 'workflow_dispatch' || github.actor == 'lmxyy')
+    if: github.repository == 'nunchux-ai/nunchaku' && (github.event_name != 'workflow_dispatch' || github.actor == 'lmxyy')
     env:
       DOC_VERSION: ${{ github.event.inputs.version || 'nightly' }}
     steps:

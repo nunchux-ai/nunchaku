@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   close-inactive-issues:
-    if: github.repository == 'nunchaku-ai/nunchaku'
+    if: github.repository == 'nunchux-ai/nunchaku'
     runs-on: ubuntu-latest
     steps:
       - name: Check and close inactive issues

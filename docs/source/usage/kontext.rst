@@ -10,5 +10,5 @@ The implementation follows the same pattern as described in :doc:`Basic Usage <.
 
 .. literalinclude:: ../../../examples/flux.1-kontext-dev.py
    :language: python
-   :caption: Running FLUX.1-Kontext-dev (`examples/flux.1-kontext-dev.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-kontext-dev.py>`__)
+   :caption: Running FLUX.1-Kontext-dev (`examples/flux.1-kontext-dev.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-kontext-dev.py>`__)
    :linenos:

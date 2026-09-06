@@ -10,7 +10,7 @@ Nunchaku supports `First-Block Cache (FB Cache) <fbcache>`_ for faster long-step
 
 .. literalinclude:: ../../../examples/flux.1-dev-cache.py
    :language: python
-   :caption: Running FLUX.1-dev with FB Cache (`examples/flux.1-dev-cache.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-cache.py>`__)
+   :caption: Running FLUX.1-dev with FB Cache (`examples/flux.1-dev-cache.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-cache.py>`__)
    :linenos:
    :emphasize-lines: 15-17
 
@@ -42,14 +42,14 @@ Install the required package:
 
       .. literalinclude:: ../../../examples/v1/flux.1-dev-cache-dit.py
          :language: python
-         :caption: FLUX.1-dev with Cache-DiT (`examples/v1/flux.1-dev-cache-dit.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/flux.1-dev-cache-dit.py>`__)
+         :caption: FLUX.1-dev with Cache-DiT (`examples/v1/flux.1-dev-cache-dit.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/flux.1-dev-cache-dit.py>`__)
          :linenos:
 
    .. tab:: Qwen-Image
 
       .. literalinclude:: ../../../examples/v1/qwen-image-cache-dit.py
          :language: python
-         :caption: Qwen-Image with Cache-DiT (`examples/v1/qwen-image-cache-dit.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/v1/qwen-image-cache-dit.py>`__)
+         :caption: Qwen-Image with Cache-DiT (`examples/v1/qwen-image-cache-dit.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/v1/qwen-image-cache-dit.py>`__)
          :linenos:
 
 For more information, refer to the `Cache-DiT documentation <https://cache-dit.readthedocs.io/en/latest/>`__.

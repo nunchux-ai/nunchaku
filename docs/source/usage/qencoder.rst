@@ -5,7 +5,7 @@ Nunchaku provides a quantized T5 encoder for FLUX.1 to reduce GPU memory usage.
 
 .. literalinclude:: ../../../examples/flux.1-dev-qencoder.py
    :language: python
-   :caption: Running FLUX.1-dev with Quantized T5 (`examples/flux.1-dev-qencoder.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-qencoder.py>`__)
+   :caption: Running FLUX.1-dev with Quantized T5 (`examples/flux.1-dev-qencoder.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-qencoder.py>`__)
    :linenos:
    :emphasize-lines: 11, 14
 

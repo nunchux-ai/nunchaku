@@ -9,7 +9,7 @@ jobs:
   tag:
     name: Check if main branch is a dev version
     runs-on: ubuntu-latest
-    if: github.repository == 'nunchaku-ai/nunchaku'
+    if: github.repository == 'nunchux-ai/nunchaku'
     outputs:
       need_build: ${{ steps.check.outputs.need_build }}
       tag_name: ${{ steps.tag.outputs.tag_name }}
@@ -73,7 +73,7 @@ jobs:
     name: Build the linux nightly wheels
     runs-on: [self-hosted, linux-build]
     needs: tag
-    if: needs.tag.outputs.need_build == 'true' && github.repository == 'nunchaku-ai/nunchaku'
+    if: needs.tag.outputs.need_build == 'true' && github.repository == 'nunchux-ai/nunchaku'
     strategy:
       matrix:
         python: ["3.10", "3.11", "3.12", "3.13"]
@@ -114,7 +114,7 @@ jobs:
     name: Build the windows nightly wheels
     runs-on: [self-hosted, win-build]
     needs: tag
-    if: needs.tag.outputs.need_build == 'true' && github.repository == 'nunchaku-ai/nunchaku'
+    if: needs.tag.outputs.need_build == 'true' && github.repository == 'nunchux-ai/nunchaku'
     strategy:
       matrix:
         python: ["3.10", "3.11", "3.12", "3.13"]

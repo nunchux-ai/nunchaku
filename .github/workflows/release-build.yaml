@@ -7,7 +7,7 @@ jobs:
   release:
     name: Tag Main Branch and Create Release
     runs-on: ubuntu-latest
-    if: github.repository == 'nunchaku-ai/nunchaku'
+    if: github.repository == 'nunchux-ai/nunchaku'
     outputs:
       tag_name: ${{ steps.set-tag.outputs.tag_name }}
     steps:

@@ -8,7 +8,7 @@ jobs:
   cleanup:
     name: Delete old nightly releases and tags
     runs-on: ubuntu-latest
-    if: github.repository == 'nunchaku-ai/nunchaku'
+    if: github.repository == 'nunchux-ai/nunchaku'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

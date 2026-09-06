@@ -8,7 +8,7 @@ This feature allows you to generate images that maintain specific identity chara
 
 .. literalinclude:: ../../../examples/flux.1-dev-pulid.py
    :language: python
-   :caption: PuLID Example (`examples/flux.1-dev-pulid.py <https://github.com/nunchaku-tech/nunchaku/blob/main/examples/flux.1-dev-pulid.py>`__)
+   :caption: PuLID Example (`examples/flux.1-dev-pulid.py <https://github.com/nunchux-ai/nunchaku/blob/main/examples/flux.1-dev-pulid.py>`__)
    :linenos:
 
 The PuLID integration follows these key steps:
