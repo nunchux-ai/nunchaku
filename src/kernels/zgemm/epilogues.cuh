@@ -242,7 +242,7 @@ public:
 
             if (is_q || is_k) {
                 apply(fpsum,
-                      args.out + bm * BLOCK_M * args.actualN + bn * BLOCK_N,
+                      args.out + (int64_t)bm * BLOCK_M * args.actualN + bn * BLOCK_N,
                       M,
                       N,
                       K,

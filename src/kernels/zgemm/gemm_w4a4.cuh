@@ -1140,7 +1140,7 @@ public:
 
             fpsum_warp fpsum;
 
-            Base::template load_act_to_fpsum<fuse_glu>()(args.input + m_offset * args.actualN + n_offset,
+            Base::template load_act_to_fpsum<fuse_glu>()(args.input + (int64_t)m_offset * args.actualN + n_offset,
                                                          args.actualN,
                                                          args.actualM - m_offset,
                                                          args.actualN - n_offset,

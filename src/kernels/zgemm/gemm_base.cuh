@@ -680,7 +680,7 @@ public:
             const int n_offset = binfo.bn * BLOCK_N;
 
             unpack_fpsum()(fpsum,
-                           args.out + m_offset * args.actualN + n_offset,
+                           args.out + (int64_t)m_offset * args.actualN + n_offset,
                            args.actualN,
                            args.actualM - m_offset,
                            args.actualN - n_offset,

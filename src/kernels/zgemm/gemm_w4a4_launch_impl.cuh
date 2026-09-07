@@ -469,10 +469,10 @@ void GEMM_W4A4_Launch<Config, USE_FP4>::quantize_w4a4_act_fuse_lora(Tensor input
     // assert(oscales.dtype() == Tensor::FP16);
     if (fp4) {
         assert(oscales.dtype() == Tensor::FP8_E4M3);
-        assert(oscales.numel() == M * N / GEMM::WARP_K * 4);
+        assert(oscales.numel() == (int64_t)M * N / GEMM::WARP_K * 4);
     } else {
         assert(isTypeMatch<half_t>(oscales.dtype()));
-        assert(oscales.numel() == M * N / GEMM::WARP_K);
+        assert(oscales.numel() == (int64_t)M * N / GEMM::WARP_K);
     }
 
     const int rank = lora_down.shape[1];
@@ -536,7 +536,7 @@ void GEMM_W4A4_Launch<Config, USE_FP4>::quantize_w4a4_act(Tensor input, Tensor o
 
     // assert(oscales.dtype() == Tensor::FP16);
     assert(isTypeMatch<half_t>(oscales.dtype()));
-    assert(oscales.numel() == M * K / GEMM::WARP_K);
+    assert(oscales.numel() == (int64_t)M * K / GEMM::WARP_K);
 
     dim3 grid(M / GEMM::WARP_M, K / GEMM::WARP_K);
     invoke_kernel<typename GEMM::quantize_w4a4_act_kernel><<<grid, GEMM::WARP_SIZE, 0, getCurrentCUDAStream()>>>(
