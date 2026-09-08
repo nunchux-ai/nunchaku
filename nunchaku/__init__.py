@@ -1,4 +1,5 @@
 from .models import (
+    NunchakuChromaTransformer2dModel,
     NunchakuFluxTransformer2dModel,
     NunchakuFluxTransformer2DModelV2,
     NunchakuQwenImageTransformer2DModel,
@@ -8,6 +9,7 @@ from .models import (
 )
 
 __all__ = [
+    "NunchakuChromaTransformer2dModel",
     "NunchakuFluxTransformer2dModel",
     "NunchakuSanaTransformer2DModel",
     "NunchakuT5EncoderModel",

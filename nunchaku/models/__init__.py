@@ -1,5 +1,6 @@
 from .text_encoders.t5_encoder import NunchakuT5EncoderModel
 from .transformers import (
+    NunchakuChromaTransformer2dModel,
     NunchakuFluxTransformer2dModel,
     NunchakuFluxTransformer2DModelV2,
     NunchakuQwenImageTransformer2DModel,
@@ -8,6 +9,7 @@ from .transformers import (
 )
 
 __all__ = [
+    "NunchakuChromaTransformer2dModel",
     "NunchakuFluxTransformer2dModel",
     "NunchakuSanaTransformer2DModel",
     "NunchakuT5EncoderModel",
