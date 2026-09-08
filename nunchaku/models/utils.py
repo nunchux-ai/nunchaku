@@ -112,6 +112,12 @@ class CPUOffloadManager:
         self.compute_done = torch.cuda.Event(blocking=False)
         self.memory_done = torch.cuda.Event(blocking=False)
 
+        # Build the ping-pong GPU scratch blocks. Deepcopy on CPU (not GPU) to
+        # avoid a GPU-tensor deepcopy deadlock when this manager is constructed
+        # inside a forward pass. set_device() relocates the blocks afterwards.
+        first_param = next(blocks[0].parameters(), None)
+        if first_param is not None and first_param.is_cuda:
+            blocks[0].to("cpu")
         self.buffer_blocks = [copy.deepcopy(blocks[0]), copy.deepcopy(blocks[0])]
 
         self.device = None
