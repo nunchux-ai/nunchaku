@@ -274,6 +274,73 @@ class SVDQW4A4Linear(nn.Module):
             f"rank={self.rank}, precision={self.precision}, act_unsigned={self.act_unsigned})"
         )
 
+    def update_lora_weights(
+        self,
+        extra_proj_down: torch.Tensor,
+        extra_proj_up: torch.Tensor,
+        strength: float = 1.0,
+    ) -> None:
+        """
+        Update LoRA projection weights by fusing extra LoRA with existing SVD low-rank.
+
+        Parameters
+        ----------
+        extra_proj_down : torch.Tensor
+            Extra down-projection tensor, shape (extra_rank, in_features).
+        extra_proj_up : torch.Tensor
+            Extra up-projection tensor, shape (out_features, extra_rank).
+        strength : float, optional
+            LoRA strength multiplier. Default is 1.0.
+        """
+        from ..lora.flux.nunchaku_converter import pack_lowrank_weight, unpack_lowrank_weight
+
+        device = self.proj_down.device
+        dtype = self.proj_down.dtype
+
+        extra_proj_down = extra_proj_down.to(device=device, dtype=dtype)
+        extra_proj_up = extra_proj_up.to(device=device, dtype=dtype) * strength
+
+        unpacked_down = unpack_lowrank_weight(self.proj_down.data, down=True)
+        unpacked_up = unpack_lowrank_weight(self.proj_up.data, down=False)
+
+        fused_down = torch.cat([unpacked_down, extra_proj_down], dim=0)
+        fused_up = torch.cat([unpacked_up, extra_proj_up], dim=1)
+
+        packed_down = pack_lowrank_weight(fused_down, down=True)
+        packed_up = pack_lowrank_weight(fused_up, down=False)
+
+        new_rank = fused_down.shape[0]
+
+        del self.proj_down
+        del self.proj_up
+        self.proj_down = nn.Parameter(packed_down.contiguous(), requires_grad=False)
+        self.proj_up = nn.Parameter(packed_up.contiguous(), requires_grad=False)
+        self.rank = new_rank
+
+    def reset_lora_weights(
+        self, original_proj_down: torch.Tensor, original_proj_up: torch.Tensor, original_rank: int
+    ) -> None:
+        """
+        Reset LoRA weights to original state.
+
+        Parameters
+        ----------
+        original_proj_down : torch.Tensor
+            Original proj_down weights (packed format).
+        original_proj_up : torch.Tensor
+            Original proj_up weights (packed format).
+        original_rank : int
+            Original rank value.
+        """
+        device = self.proj_down.device
+        dtype = self.proj_down.dtype
+
+        del self.proj_down
+        del self.proj_up
+        self.proj_down = nn.Parameter(original_proj_down.to(device=device, dtype=dtype).contiguous(), requires_grad=False)
+        self.proj_up = nn.Parameter(original_proj_up.to(device=device, dtype=dtype).contiguous(), requires_grad=False)
+        self.rank = original_rank
+
 
 class AWQW4A16Linear(nn.Module):
     """

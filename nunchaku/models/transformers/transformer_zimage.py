@@ -3,11 +3,14 @@ This module provides Nunchaku ZImageTransformer2DModel and its building blocks i
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import List, Optional
 
 import torch
+
+logger = logging.getLogger(__name__)
 import torch.nn as nn
 from diffusers.models.attention import FeedForward
 from diffusers.models.attention_processor import Attention
@@ -415,4 +418,257 @@ class NunchakuZImageTransformer2DModel(ZImageTransformer2DModel, NunchakuModelLo
 
         transformer.load_state_dict(model_state_dict)
 
+        # Save original weights for LoRA reset
+        transformer._quantized_part_sd = {}
+        transformer._unquantized_part_sd = {}
+        transformer._unquantized_part_loras = {}
+        transformer._lora_strength = 1.0
+
+        for n, m in transformer.named_modules():
+            if isinstance(m, SVDQW4A4Linear):
+                transformer._quantized_part_sd[f"{n}.proj_down"] = m.proj_down.data.clone()
+                transformer._quantized_part_sd[f"{n}.proj_up"] = m.proj_up.data.clone()
+
+        # Save unquantized parts (adaLN_modulation)
+        for k, v in model_state_dict.items():
+            if "adaLN_modulation" in k:
+                transformer._unquantized_part_sd[k] = v.clone()
+
         return transformer
+
+    def _convert_lora_to_nunchaku_format(
+        self, lora_sd: dict[str, torch.Tensor], strength: float = 1.0
+    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+        """
+        Convert LoRA weights from diffusers format to nunchaku format.
+
+        Returns
+        -------
+        tuple[dict, dict]
+            (quantized_loras, unquantized_loras)
+        """
+        quantized_loras = {}
+        unquantized_loras = {}
+
+        # Group LoRA weights by block
+        block_loras = {}
+        for k, v in lora_sd.items():
+            k = k.replace("diffusion_model.", "")
+            parts = k.split(".")
+            if "layers" in k and len(parts) >= 3:
+                block_name = f"{parts[0]}.{parts[1]}"
+                local_key = ".".join(parts[2:])
+                if block_name not in block_loras:
+                    block_loras[block_name] = {}
+                block_loras[block_name][local_key] = v
+
+        for block_name, local_loras in block_loras.items():
+            # Handle Q/K/V fusion for attention
+            q_lora_a = local_loras.get("attention.to_q.lora_A.weight")
+            q_lora_b = local_loras.get("attention.to_q.lora_B.weight")
+            k_lora_a = local_loras.get("attention.to_k.lora_A.weight")
+            k_lora_b = local_loras.get("attention.to_k.lora_B.weight")
+            v_lora_a = local_loras.get("attention.to_v.lora_A.weight")
+            v_lora_b = local_loras.get("attention.to_v.lora_B.weight")
+
+            if all(x is not None for x in [q_lora_a, q_lora_b, k_lora_a, k_lora_b, v_lora_a, v_lora_b]):
+                # Validate QKV ranks match
+                ranks = [q_lora_a.shape[0], k_lora_a.shape[0], v_lora_a.shape[0]]
+                if len(set(ranks)) > 1:
+                    raise ValueError(
+                        f"QKV LoRA projections must have the same rank in block '{block_name}', "
+                        f"got Q={ranks[0]}, K={ranks[1]}, V={ranks[2]}"
+                    )
+
+                rank = q_lora_a.shape[0]
+                out_q, out_k, out_v = q_lora_b.shape[0], k_lora_b.shape[0], v_lora_b.shape[0]
+
+                qkv_proj_down = torch.cat([q_lora_a.T, k_lora_a.T, v_lora_a.T], dim=1)
+                total_out = out_q + out_k + out_v
+                qkv_proj_up = torch.zeros(total_out, 3 * rank, dtype=q_lora_b.dtype, device=q_lora_b.device)
+                qkv_proj_up[:out_q, :rank] = q_lora_b
+                qkv_proj_up[out_q : out_q + out_k, rank : 2 * rank] = k_lora_b
+                qkv_proj_up[out_q + out_k :, 2 * rank :] = v_lora_b
+
+                quantized_loras[f"{block_name}.attention.to_qkv.proj_down"] = qkv_proj_down.contiguous()
+                quantized_loras[f"{block_name}.attention.to_qkv.proj_up"] = qkv_proj_up.contiguous()
+
+            # Handle attention output projection
+            out_lora_a = local_loras.get("attention.to_out.0.lora_A.weight")
+            out_lora_b = local_loras.get("attention.to_out.0.lora_B.weight")
+            if out_lora_a is not None and out_lora_b is not None:
+                quantized_loras[f"{block_name}.attention.to_out.0.proj_down"] = out_lora_a.T.contiguous()
+                quantized_loras[f"{block_name}.attention.to_out.0.proj_up"] = out_lora_b.contiguous()
+
+            # Handle feed_forward w1, w2, w3
+            for w_name in ["w1", "w2", "w3"]:
+                w_lora_a = local_loras.get(f"feed_forward.{w_name}.lora_A.weight")
+                w_lora_b = local_loras.get(f"feed_forward.{w_name}.lora_B.weight")
+                if w_lora_a is not None and w_lora_b is not None:
+                    quantized_loras[f"{block_name}.feed_forward.{w_name}.proj_down"] = w_lora_a.T.contiguous()
+                    quantized_loras[f"{block_name}.feed_forward.{w_name}.proj_up"] = w_lora_b.contiguous()
+
+            # Handle adaLN_modulation (unquantized)
+            adaln_lora_a = local_loras.get("adaLN_modulation.0.lora_A.weight")
+            adaln_lora_b = local_loras.get("adaLN_modulation.0.lora_B.weight")
+            if adaln_lora_a is not None and adaln_lora_b is not None:
+                unquantized_loras[f"{block_name}.adaLN_modulation.0.lora_A.weight"] = adaln_lora_a
+                unquantized_loras[f"{block_name}.adaLN_modulation.0.lora_B.weight"] = adaln_lora_b
+
+        return quantized_loras, unquantized_loras
+
+    def _apply_quantized_loras(self, extra_loras: dict[str, torch.Tensor], strength: float = 1.0):
+        """Apply external LoRA weights by fusing them with the existing SVD low-rank weights."""
+        device = next(self.parameters()).device
+        dtype = next(self.parameters()).dtype
+
+        for n, m in self.named_modules():
+            if isinstance(m, SVDQW4A4Linear):
+                proj_down_key = f"{n}.proj_down"
+                proj_up_key = f"{n}.proj_up"
+
+                extra_down = extra_loras.get(proj_down_key)
+                extra_up = extra_loras.get(proj_up_key)
+
+                if extra_down is not None and extra_up is not None:
+                    extra_down_transposed = extra_down.T.contiguous()
+                    m.update_lora_weights(
+                        extra_proj_down=extra_down_transposed.to(device=device, dtype=dtype),
+                        extra_proj_up=extra_up.to(device=device, dtype=dtype),
+                        strength=strength,
+                    )
+
+    def _reset_quantized_loras(self):
+        """Reset all quantized LoRA weights to their original state."""
+        if not self._quantized_part_sd:
+            return
+
+        for n, m in self.named_modules():
+            if isinstance(m, SVDQW4A4Linear):
+                proj_down_key = f"{n}.proj_down"
+                proj_up_key = f"{n}.proj_up"
+
+                orig_down = self._quantized_part_sd.get(proj_down_key)
+                orig_up = self._quantized_part_sd.get(proj_up_key)
+
+                if orig_down is not None and orig_up is not None:
+                    original_rank = orig_down.shape[1]
+                    m.reset_lora_weights(orig_down, orig_up, original_rank)
+
+        # Explicit GPU memory cleanup to prevent memory leaks
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def _apply_unquantized_loras(self, unquantized_loras: dict[str, torch.Tensor], strength: float = 1.0):
+        """Apply LoRA to unquantized parts (adaLN_modulation)."""
+        device = next(self.parameters()).device
+        dtype = next(self.parameters()).dtype
+
+        new_state_dict = {}
+        for k, v in self._unquantized_part_sd.items():
+            v = v.to(device=device, dtype=dtype)
+            lora_a_key = k.replace(".weight", ".lora_A.weight").replace(".bias", ".lora_A.weight")
+            lora_b_key = k.replace(".weight", ".lora_B.weight").replace(".bias", ".lora_B.weight")
+
+            if ".weight" in k and lora_b_key in unquantized_loras:
+                lora_a = unquantized_loras.get(lora_a_key)
+                lora_b = unquantized_loras.get(lora_b_key)
+                if lora_a is not None and lora_b is not None:
+                    lora_a = lora_a.to(device=device, dtype=dtype)
+                    lora_b = lora_b.to(device=device, dtype=dtype)
+                    diff = strength * (lora_b @ lora_a)
+                    new_state_dict[k] = v + diff
+                else:
+                    new_state_dict[k] = v
+            else:
+                new_state_dict[k] = v
+
+        self.load_state_dict(new_state_dict, strict=False)
+
+    def update_lora_params(self, path_or_state_dict: str | dict[str, torch.Tensor], strength: float = 1.0):
+        """
+        Update the model with new LoRA parameters.
+
+        Parameters
+        ----------
+        path_or_state_dict : str or dict
+            Path to a LoRA weights file or a state dict.
+        strength : float, optional
+            LoRA scaling strength (default: 1.0).
+
+        Raises
+        ------
+        ValueError
+            If strength is negative or state dict is empty/invalid.
+        """
+        from safetensors.torch import load_file
+
+        # Validate strength parameter
+        if strength < 0:
+            raise ValueError(f"LoRA strength must be non-negative, got {strength}")
+
+        if isinstance(path_or_state_dict, str):
+            lora_sd = load_file(path_or_state_dict)
+        else:
+            lora_sd = path_or_state_dict
+
+        # Validate state dict is not empty
+        if not lora_sd:
+            raise ValueError("LoRA state dict is empty")
+
+        self._lora_strength = strength
+        self._reset_quantized_loras()
+
+        quantized_loras, unquantized_loras = self._convert_lora_to_nunchaku_format(lora_sd, strength=1.0)
+
+        # Validate conversion results
+        if not quantized_loras and not unquantized_loras:
+            logger.warning(
+                "No LoRA layers were converted. Please verify the LoRA file is compatible with ZImage model. "
+                "Expected keys with patterns like 'layers.X.attention.to_q.lora_A.weight'."
+            )
+            return
+
+        self._unquantized_part_loras = unquantized_loras
+
+        self._apply_quantized_loras(quantized_loras, strength=strength)
+        if unquantized_loras:
+            self._apply_unquantized_loras(unquantized_loras, strength)
+
+        logger.info(f"Loaded LoRA with strength {strength}, {len(quantized_loras)} quantized layers, {len(unquantized_loras)} unquantized layers")
+
+    def set_lora_strength(self, strength: float = 1.0):
+        """
+        Sets the LoRA scaling strength for the model.
+
+        Parameters
+        ----------
+        strength : float, optional
+            LoRA scaling strength (default: 1.0).
+
+        Raises
+        ------
+        ValueError
+            If strength is negative.
+        """
+        if strength < 0:
+            raise ValueError(f"LoRA strength must be non-negative, got {strength}")
+
+        if self._unquantized_part_loras:
+            self._apply_unquantized_loras(self._unquantized_part_loras, strength)
+        self._lora_strength = strength
+
+    def reset_lora(self):
+        """Resets all LoRA parameters to their default state."""
+        device = next(self.parameters()).device
+        dtype = next(self.parameters()).dtype
+
+        self._reset_quantized_loras()
+
+        if self._unquantized_part_sd:
+            new_state_dict = {k: v.to(device=device, dtype=dtype) for k, v in self._unquantized_part_sd.items()}
+            self.load_state_dict(new_state_dict, strict=False)
+
+        self._unquantized_part_loras = {}
+        self._lora_strength = 1.0
+        logger.info("LoRA reset to original state")
