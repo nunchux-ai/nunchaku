@@ -149,13 +149,31 @@ class SVDQW4A4Linear(nn.Module):
         SVDQW4A4Linear
         """
         in_features = kwargs.pop("in_features", linear.in_features)
-        torch_dtype = kwargs.pop("torch_dtype", linear.weight.dtype)
+        weight = getattr(linear, "weight", None)
+        bias = getattr(linear, "bias", None)
+
+        torch_dtype = kwargs.pop("torch_dtype", None)
+        if torch_dtype is None:
+            if weight is not None:
+                torch_dtype = weight.dtype
+            else:
+                torch_dtype = getattr(linear, "weight_comfy_model_dtype", torch.bfloat16)
+
+        device = kwargs.pop("device", None)
+        if device is None:
+            if weight is not None:
+                device = weight.device
+            elif bias is not None:
+                device = bias.device
+            else:
+                device = torch.device("cpu")
+
         return cls(
             in_features=in_features,
             out_features=linear.out_features,
-            bias=linear.bias is not None,
+            bias=bias is not None,
             torch_dtype=torch_dtype,
-            device=linear.weight.device,
+            device=device,
             **kwargs,
         )
 
