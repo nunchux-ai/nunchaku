@@ -8,10 +8,10 @@ from datetime import datetime
 import GPUtil
 import spaces
 import torch
-from utils import get_pipeline
 from vars import EXAMPLES, MAX_SEED
 
 from nunchaku.models.safety_checker import SafetyChecker
+from utils import get_pipeline
 
 # import gradio last to avoid conflicts with other imports
 import gradio as gr  # noqa: isort: skip

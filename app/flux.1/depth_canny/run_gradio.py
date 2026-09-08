@@ -9,7 +9,6 @@ from controlnet_aux import CannyDetector
 from diffusers import FluxControlPipeline
 from image_gen_aux import DepthPreprocessor
 from PIL import Image
-from utils import get_args
 from vars import (
     DEFAULT_GUIDANCE_CANNY,
     DEFAULT_GUIDANCE_DEPTH,
@@ -26,6 +25,7 @@ from vars import (
 
 from nunchaku.models.safety_checker import SafetyChecker
 from nunchaku.models.transformers.transformer_flux import NunchakuFluxTransformer2dModel
+from utils import get_args
 
 # import gradio last to avoid conflicts with other imports
 import gradio as gr  # noqa: isort: skip

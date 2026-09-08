@@ -8,10 +8,10 @@ from datetime import datetime
 import spaces
 import torch
 from peft.tuners import lora
-from utils import get_pipeline
 from vars import DEFAULT_HEIGHT, DEFAULT_WIDTH, EXAMPLES, LORA_PATHS, MAX_SEED, PROMPT_TEMPLATES
 
 from nunchaku.models.safety_checker import SafetyChecker
+from utils import get_pipeline
 
 # import gradio last to avoid conflicts with other imports
 import gradio as gr  # noqa: isort: skip

@@ -7,11 +7,11 @@ from datetime import datetime
 import torch
 from diffusers import FluxFillPipeline
 from PIL import Image
-from utils import get_args
 from vars import DEFAULT_GUIDANCE, DEFAULT_INFERENCE_STEP, DEFAULT_STYLE_NAME, EXAMPLES, MAX_SEED, STYLE_NAMES, STYLES
 
 from nunchaku.models.safety_checker import SafetyChecker
 from nunchaku.models.transformers.transformer_flux import NunchakuFluxTransformer2dModel
+from utils import get_args
 
 # import gradio last to avoid conflicts with other imports
 import gradio as gr  # noqa: isort: skip

@@ -7,10 +7,10 @@ from datetime import datetime
 import torch
 from diffusers import FluxKontextPipeline
 from PIL import Image
-from utils import get_args
 from vars import EXAMPLES, MAX_SEED
 
 from nunchaku.models.transformers.transformer_flux import NunchakuFluxTransformer2dModel
+from utils import get_args
 
 # import gradio last to avoid conflicts with other imports
 import gradio as gr  # noqa: isort: skip

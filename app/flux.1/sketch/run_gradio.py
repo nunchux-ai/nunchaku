@@ -8,11 +8,11 @@ import numpy as np
 import torch
 from flux_pix2pix_pipeline import FluxPix2pixTurboPipeline
 from PIL import Image
-from utils import get_args
 from vars import DEFAULT_SKETCH_GUIDANCE, DEFAULT_STYLE_NAME, MAX_SEED, STYLE_NAMES, STYLES
 
 from nunchaku.models.safety_checker import SafetyChecker
 from nunchaku.models.transformers.transformer_flux import NunchakuFluxTransformer2dModel
+from utils import get_args
 
 # import gradio last to avoid conflicts with other imports
 import gradio as gr  # noqa: isort: skip
