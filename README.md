@@ -17,6 +17,7 @@ Join our user groups on [**Discord**](https://discord.gg/Wk6PnwX9Sm) and [**WeCh
 
 ## News
 
+- **[2026-07-20]** 🔥 Release **4-bit [krea/Krea-2-Turbo](https://huggingface.co/krea/Krea-2-Turbo)**! W4A4 checkpoint on [Hugging Face](https://huggingface.co/felipesztutman/Krea-2-Turbo-W4A4-Nunchaku), and try it with our [example script](examples/v1/krea-2-turbo.py).
 - **[2026-01-12]** 🚀 **v1.2.0 Released!** Enjoy a **20–30% Z-Image performance boost**, seamless **LoRA support with native ComfyUI nodes**, **INT4 support for 20-series GPUs**, and **compatibility with ComfyUI 0.7**!
 - **[2025-12-20]** 🔥 Release **4-bit [Tongyi-MAI/Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)**! Download on [Hugging Face](https://huggingface.co/nunchaku-ai/nunchaku-z-image-turbo) or [ModelScope](https://modelscope.cn/models/nunchaku-tech/nunchaku-z-image-turbo), and try it with our [example script](examples/v1/z-image-turbo.py).
 - **[2025-09-25]** 🔥 Release **4-bit [4/8-step lightning Qwen-Image-Edit-2509](https://huggingface.co/lightx2v/Qwen-Image-Lightning)**! Download on [Hugging Face](https://huggingface.co/nunchaku-ai/nunchaku-qwen-image-edit-2509) or [ModelScope](https://modelscope.cn/models/nunchaku-tech/nunchaku-qwen-image-edit-2509), and try it with our [example script](examples/v1/qwen-image-edit-2509-lightning.py).

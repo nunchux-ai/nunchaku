@@ -28,6 +28,7 @@ Check out `DeepCompressor <github_deepcompressor_>`_ for the quantization librar
     usage/cache.rst
     usage/pulid.rst
     usage/ip_adapter.rst
+    usage/krea2.rst
     usage/zimage.rst
 
 .. toctree::
