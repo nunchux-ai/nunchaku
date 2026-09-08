@@ -73,6 +73,7 @@ def fused_gelu_mlp(x: torch.Tensor, fc1: SVDQW4A4Linear, fc2: SVDQW4A4Linear, pa
         fp4=fc1.precision == "nvfp4",
         alpha=fc1.wtscale,
         wcscales=fc1.wcscales,
+        lora_scales=fc1.lora_scales,
     )
     output = torch.empty(batch_size * seq_len, fc2.out_features, dtype=x.dtype, device=x.device)
     output = fc2.forward_quant(qout_act, qout_ascales, qout_lora_act, output=output)
@@ -160,6 +161,7 @@ def fused_qkv_norm_rottary(
             out_k=output_k,
             out_v=output_v,
             attn_tokens=attn_tokens,
+            lora_scales=proj.lora_scales,
         )
         return output_q, output_k, output_v
     else:
@@ -178,6 +180,7 @@ def fused_qkv_norm_rottary(
             norm_q=norm_q.weight if norm_q is not None else None,
             norm_k=norm_k.weight if norm_k is not None else None,
             rotary_emb=rotary_emb,
+            lora_scales=proj.lora_scales,
         )
         output = output.view(batch_size, seq_len, -1)
         return output

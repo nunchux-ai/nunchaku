@@ -2,6 +2,8 @@
 Quantized linear layers for Nunchaku.
 """
 
+import math
+
 import torch
 from torch import nn
 
@@ -132,6 +134,9 @@ class SVDQW4A4Linear(nn.Module):
 
         self.act_unsigned = act_unsigned
 
+        self.lora_scales = [1.0] * math.ceil(rank / 16)
+        self.orig_rank = rank
+
     @classmethod
     def from_linear(cls, linear: nn.Linear, **kwargs):
         """
@@ -157,6 +162,52 @@ class SVDQW4A4Linear(nn.Module):
             torch_dtype=torch_dtype,
             device=linear.weight.device,
             **kwargs,
+        )
+
+    def set_lora_scale(self, scale):
+        for i in range(self.orig_rank // 16):
+            self.lora_scales[i] = 1.0
+        for i in range(self.orig_rank // 16, len(self.lora_scales)):
+            self.lora_scales[i] = scale
+
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        if len(state_dict) == 0:
+            super()._load_from_state_dict(
+                state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+            )
+            return
+
+        _in_features, _rank = state_dict[prefix + "proj_down"].shape
+        _out_features = state_dict[prefix + "proj_up"].shape[0]
+
+        if _in_features != self.in_features or _rank != self.rank:
+            _dtype = self.proj_down.dtype
+            _device = self.proj_down.device
+            self.proj_down = nn.Parameter(torch.empty(_in_features, _rank, dtype=_dtype, device=_device))
+
+        if _out_features != self.out_features or _rank != self.rank:
+            _dtype = self.proj_up.dtype
+            _device = self.proj_up.device
+            self.proj_up = nn.Parameter(torch.empty(_out_features, _rank, dtype=_dtype, device=_device))
+
+        if _rank != self.rank:
+            self.lora_scales = [1.0] * math.ceil(_rank / 16)
+
+        self.in_features = _in_features
+        self.out_features = _out_features
+        self.rank = _rank
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
     def forward(self, x: torch.Tensor, output: torch.Tensor | None = None) -> torch.Tensor:
@@ -265,13 +316,15 @@ class SVDQW4A4Linear(nn.Module):
             alpha=self.wtscale,
             wcscales=self.wcscales,
             act_unsigned=self.act_unsigned,
+            lora_scales=self.lora_scales,
         )
         return output
 
     def __repr__(self):
         return (
             f"SVDQW4A4Linear(in_features={self.in_features}, out_features={self.out_features}, "
-            f"rank={self.rank}, precision={self.precision}, act_unsigned={self.act_unsigned})"
+            f"rank={self.rank}, precision={self.precision}, act_unsigned={self.act_unsigned}), "
+            f"orig_rank={self.orig_rank}, lora_scales={self.lora_scales}"
         )
 
 

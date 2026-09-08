@@ -3,11 +3,13 @@ This module provides Nunchaku FluxTransformer2DModel and its building blocks in 
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
+from diffusers.configuration_utils import register_to_config
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.transformers.transformer_flux import (
     FluxAttention,
@@ -16,10 +18,13 @@ from diffusers.models.transformers.transformer_flux import (
     FluxTransformerBlock,
 )
 from huggingface_hub import utils
+from torch import nn
 from torch.nn import GELU
 
+from ...lora.flux.nunchaku_converter import fuse_vectors, to_nunchaku
+from ...lora.flux.utils import is_nunchaku_format
 from ...ops.fused import fused_gelu_mlp
-from ...utils import get_precision, pad_tensor
+from ...utils import get_precision, load_state_dict_in_safetensors, pad_tensor
 from ..attention import NunchakuBaseAttention, NunchakuFeedForward
 from ..attention_processors.flux import NunchakuFluxFA2Processor, NunchakuFluxFP16AttnProcessor
 from ..embeddings import NunchakuFluxPosEmbed, pack_rotemb
@@ -347,6 +352,41 @@ class NunchakuFluxTransformer2DModelV2(FluxTransformer2DModel, NunchakuModelLoad
     Nunchaku-optimized FluxTransformer2DModel.
     """
 
+    @register_to_config
+    def __init__(
+        self,
+        patch_size: int = 1,
+        in_channels: int = 64,
+        out_channels: Optional[int] = None,
+        num_layers: int = 19,
+        num_single_layers: int = 38,
+        attention_head_dim: int = 128,
+        num_attention_heads: int = 24,
+        joint_attention_dim: int = 4096,
+        pooled_projection_dim: int = 768,
+        guidance_embeds: bool = False,
+        axes_dims_rope: Tuple[int, int, int] = (16, 56, 56),
+    ):
+        super(NunchakuFluxTransformer2DModelV2, self).__init__(
+            patch_size=patch_size,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            num_layers=num_layers,
+            num_single_layers=num_single_layers,
+            attention_head_dim=attention_head_dim,
+            num_attention_heads=num_attention_heads,
+            joint_attention_dim=joint_attention_dim,
+            pooled_projection_dim=pooled_projection_dim,
+            guidance_embeds=guidance_embeds,
+            axes_dims_rope=axes_dims_rope,
+        )
+        # these state_dicts are used for supporting lora
+        self._unquantized_part_sd: dict[str, torch.Tensor] = {}
+        self._unquantized_part_loras: dict[str, torch.Tensor] = {}
+        self._quantized_part_sd: dict[str, torch.Tensor] = {}
+        self._quantized_part_vectors: dict[str, torch.Tensor] = {}
+        self._original_in_channels = self.x_embedder.in_features
+
     def _patch_model(self, **kwargs):
         """
         Patch the model with :class:`~nunchaku.models.transformers.transformer_flux_v2.NunchakuFluxTransformerBlock`
@@ -408,7 +448,39 @@ class NunchakuFluxTransformer2DModelV2(FluxTransformer2DModel, NunchakuModelLoad
         assert pretrained_model_name_or_path.is_file() or pretrained_model_name_or_path.name.endswith(
             (".safetensors", ".sft")
         ), "Only safetensors are supported"
+        transformer: NunchakuFluxTransformer2DModelV2
         transformer, model_state_dict, metadata = cls._build_model(pretrained_model_name_or_path, **kwargs)
+
+        quantized_part_sd: Dict[str, torch.Tensor] = {}
+        unquantized_part_sd: Dict[str, torch.Tensor] = {}
+        for k, v in model_state_dict.items():
+            if k.startswith(("transformer_blocks.", "single_transformer_blocks.")):
+                quantized_part_sd[k] = v
+            else:
+                unquantized_part_sd[k] = v
+        new_quantized_part_sd = {}
+        for k, v in quantized_part_sd.items():
+            if v.ndim == 1:
+                new_quantized_part_sd[k] = v
+            elif "qweight" in k:
+                # only the shape information of this tensor is needed
+                new_quantized_part_sd[k] = v.to("meta")
+
+                # if the tensor has qweight, but does not have low-rank branch, we need to add some artificial tensors
+                for t in ["lora_up", "lora_down"]:
+                    new_k = k.replace(".qweight", f".{t}")
+                    if new_k not in quantized_part_sd:
+                        oc, ic = v.shape
+                        ic = ic * 2  # v is packed into INT8, so we need to double the size
+                        new_quantized_part_sd[k.replace(".qweight", f".{t}")] = torch.zeros(
+                            (0, ic) if t == "lora_down" else (oc, 0), device=v.device, dtype=torch.bfloat16
+                        )
+
+            elif "lora" in k:
+                new_quantized_part_sd[k] = v
+        transformer._quantized_part_sd = new_quantized_part_sd
+        transformer._unquantized_part_sd = unquantized_part_sd
+
         quantization_config = json.loads(metadata.get("quantization_config", "{}"))
         rank = quantization_config.get("rank", 32)
         transformer = transformer.to(torch_dtype)
@@ -559,6 +631,205 @@ class NunchakuFluxTransformer2DModelV2(FluxTransformer2DModel, NunchakuModelLoad
             return (output,)
 
         return Transformer2DModelOutput(sample=output)
+
+    def update_lora_params(self, path_or_state_dict: str | dict[str, torch.Tensor]):
+        """
+        Update the model with new LoRA parameters.
+
+        Parameters
+        ----------
+        path_or_state_dict : str or dict
+            Path to a LoRA weights file or a state dict. The path supports:
+
+            - Local file path, e.g., ``"/path/to/your/lora.safetensors"``
+            - HuggingFace repo with file, e.g., ``"user/repo/lora.safetensors"``
+              (automatically downloaded and cached)
+        """
+        if isinstance(path_or_state_dict, dict):
+            state_dict = {
+                k: v for k, v in path_or_state_dict.items()
+            }  # copy a new one to avoid modifying the original one
+        else:
+            state_dict = load_state_dict_in_safetensors(path_or_state_dict)
+
+        if not is_nunchaku_format(state_dict):
+            state_dict = to_nunchaku(state_dict, base_sd=self._quantized_part_sd)
+
+        unquantized_part_loras = {}
+        for k, v in list(state_dict.items()):
+            device = next(self.parameters()).device
+            if "transformer_blocks" not in k:
+                unquantized_part_loras[k] = state_dict.pop(k).to(device)
+
+        if len(self._unquantized_part_loras) > 0 or len(unquantized_part_loras) > 0:
+            self._unquantized_part_loras = unquantized_part_loras
+
+            self._unquantized_part_sd = {k: v for k, v in self._unquantized_part_sd.items() if "pulid_ca" not in k}
+            unquantized_part_lora_state_dict = self._get_unquantized_part_lora_state_dict(1)
+            state_dict.update(unquantized_part_lora_state_dict)
+
+        quantized_part_vectors = {}
+        for k, v in list(state_dict.items()):
+            if v.ndim == 1:
+                quantized_part_vectors[k] = state_dict.pop(k)
+        if len(self._quantized_part_vectors) > 0 or len(quantized_part_vectors) > 0:
+            self._quantized_part_vectors = quantized_part_vectors
+            updated_vectors = fuse_vectors(quantized_part_vectors, self._quantized_part_sd, 1)
+            state_dict.update(updated_vectors)
+
+        state_dict = convert_flux_state_dict(state_dict)  # v1 to v2
+
+        missing, unexpected = self.load_state_dict(state_dict, strict=False)
+        if len(unexpected) > 0:
+            logger = logging.getLogger(__name__)
+            logger.debug(f"update_lora_params missing len={len(missing)}, unexpected len={len(unexpected)}")
+            for i, unexpected_key in enumerate(unexpected):
+                logger.debug(f"unexpected_key: {unexpected_key}")
+                if i >= 10:
+                    break
+
+    def set_lora_strength(self, strength: float = 1):
+        """
+        Sets the LoRA scaling strength for the model.
+
+        Note: This function can only be used with a single LoRA. For multiple LoRAs,
+        please fuse the LoRA scale into the weights.
+
+        Parameters
+        ----------
+        strength : float, optional
+            LoRA scaling strength (default: 1).
+
+        Note: This function will change the strength of all the LoRAs. So only use it when you only have a single LoRA.
+        """
+        for _, m in self.named_modules():
+            if isinstance(m, SVDQW4A4Linear):
+                m.set_lora_scale(strength)
+        new_state_dict = {}
+        if len(self._unquantized_part_loras) > 0:
+            unquantized_part_lora_state_dict = self._get_unquantized_part_lora_state_dict(strength)
+            new_state_dict.update(unquantized_part_lora_state_dict)
+        if len(self._quantized_part_vectors) > 0:
+            vector_dict = fuse_vectors(self._quantized_part_vectors, self._quantized_part_sd, strength)
+            new_state_dict.update(vector_dict)
+        missing, unexpected = self.load_state_dict(new_state_dict, strict=False)
+        if len(missing) > 0 or len(unexpected) > 0:
+            logger = logging.getLogger(__name__)
+            logger.debug(
+                f"set_lora_strength state_dict missing key len={len(missing)}, unexpected key len={len(unexpected)}"
+            )
+
+    def _get_unquantized_part_lora_state_dict(self, strength: float = 1) -> dict[str, torch.Tensor]:
+        """
+        Updates the unquantized part of the model with LoRA parameters.
+
+        Parameters
+        ----------
+        strength : float, optional
+            LoRA scaling strength (default: 1).
+        """
+        # check if we need to expand the linear layers
+        device = next(self.parameters()).device
+        for k, v in self._unquantized_part_loras.items():
+            if "lora_A" in k:
+                lora_a = v
+                lora_b = self._unquantized_part_loras[k.replace(".lora_A.", ".lora_B.")]
+                diff_shape = (lora_b.shape[0], lora_a.shape[1])
+                weight_shape = self._unquantized_part_sd[k.replace(".lora_A.", ".")].shape
+                if diff_shape[0] > weight_shape[0] or diff_shape[1] > weight_shape[1]:
+                    module_name = ".".join(k.split(".")[:-2])
+                    self._expand_module(module_name, diff_shape)
+            elif v.ndim == 1:
+                diff_shape = v.shape
+                weight_shape = self._unquantized_part_sd[k].shape
+                if diff_shape[0] > weight_shape[0]:
+                    assert diff_shape[0] >= weight_shape[0]
+                    module_name = ".".join(k.split(".")[:-1])
+                    module = self.get_submodule(module_name)
+                    weight_shape = module.weight.shape
+                    diff_shape = (diff_shape[0], weight_shape[1])
+                    self._expand_module(module_name, diff_shape)
+        new_state_dict = {}
+        for k in self._unquantized_part_sd.keys():
+            v = self._unquantized_part_sd[k]
+            v = v.to(device)
+            self._unquantized_part_sd[k] = v
+
+            if v.ndim == 1 and k in self._unquantized_part_loras:
+                diff = strength * self._unquantized_part_loras[k]
+                if diff.shape[0] < v.shape[0]:
+                    diff = torch.cat(
+                        [diff, torch.zeros(v.shape[0] - diff.shape[0], device=device, dtype=v.dtype)], dim=0
+                    )
+                new_state_dict[k] = v + diff
+            elif v.ndim == 2 and k.replace(".weight", ".lora_B.weight") in self._unquantized_part_loras:
+                lora_a = self._unquantized_part_loras[k.replace(".weight", ".lora_A.weight")]
+                lora_b = self._unquantized_part_loras[k.replace(".weight", ".lora_B.weight")]
+
+                if lora_a.shape[1] < v.shape[1]:
+                    lora_a = torch.cat(
+                        [
+                            lora_a,
+                            torch.zeros(lora_a.shape[0], v.shape[1] - lora_a.shape[1], device=device, dtype=v.dtype),
+                        ],
+                        dim=1,
+                    )
+                if lora_b.shape[0] < v.shape[0]:
+                    lora_b = torch.cat(
+                        [
+                            lora_b,
+                            torch.zeros(v.shape[0] - lora_b.shape[0], lora_b.shape[1], device=device, dtype=v.dtype),
+                        ],
+                        dim=0,
+                    )
+
+                diff = strength * (lora_b @ lora_a)
+                new_state_dict[k] = v + diff
+            else:
+                new_state_dict[k] = v
+        return new_state_dict
+
+    def _expand_module(self, module_name: str, new_shape: tuple[int, int]):
+        """
+        Expands a linear module to a new shape for LoRA compatibility.
+        Mostly for FLUX.1-tools LoRA which changes the input channels.
+
+        Parameters
+        ----------
+        module_name : str
+            Name of the module to expand.
+        new_shape : tuple[int, int]
+            New shape (out_features, in_features) for the module.
+        """
+        module = self.get_submodule(module_name)
+        assert isinstance(module, nn.Linear)
+        weight_shape = module.weight.shape
+        # logger.info("Expand the shape of module {} from {} to {}".format(module_name, tuple(weight_shape), new_shape))
+        assert new_shape[0] >= weight_shape[0] and new_shape[1] >= weight_shape[1]
+        new_module = nn.Linear(
+            new_shape[1],
+            new_shape[0],
+            bias=module.bias is not None,
+            device=module.weight.device,
+            dtype=module.weight.dtype,
+        )
+        new_module.weight.data.zero_()
+        new_module.weight.data[: weight_shape[0], : weight_shape[1]] = module.weight.data
+        self._unquantized_part_sd[f"{module_name}.weight"] = new_module.weight.data.clone()
+        if new_module.bias is not None:
+            new_module.bias.data.zero_()
+            new_module.bias.data[: weight_shape[0]] = module.bias.data
+            self._unquantized_part_sd[f"{module_name}.bias"] = new_module.bias.data.clone()
+        parent_name = ".".join(module_name.split(".")[:-1])
+        parent_module = self.get_submodule(parent_name)
+        parent_module.add_module(module_name.split(".")[-1], new_module)
+
+        if module_name == "x_embedder":
+            new_value = int(new_module.weight.data.shape[1])
+            old_value = getattr(self.config, "in_channels")
+            if new_value != old_value:
+                # logger.info(f"Update in_channels from {old_value} to {new_value}")
+                setattr(self.config, "in_channels", new_value)
 
 
 def convert_flux_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
