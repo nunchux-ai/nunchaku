@@ -195,10 +195,11 @@ def compose_lora(
                                 composed[k] = torch.cat([previous_lora, v], dim=0)
                         else:
                             composed[k] = torch.cat([previous_lora, v], dim=1)
-
+                    """
                     composed[k] = (
                         v if previous_lora is None else torch.cat([previous_lora, v], dim=0 if "lora_A" in k else 1)
                     )
+                    """
     if output_path is not None:
         output_dir = os.path.dirname(os.path.abspath(output_path))
         os.makedirs(output_dir, exist_ok=True)
