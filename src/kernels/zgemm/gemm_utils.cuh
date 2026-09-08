@@ -355,6 +355,14 @@ __device__ __forceinline__ static void reduce_add_pred(float *addr, float val, b
                  "f"(val));
 }
 
+__device__ __forceinline__ static void reduce_add_pred(int *addr, int val, bool pred) {
+    asm volatile("{ .reg .pred storepred; setp.ne.b32 storepred, %0, 0;"
+                 "@storepred red.relaxed.gpu.global.add.s32 [%1], %2;"
+                 "}" ::"r"((int)pred),
+                 "l"(addr),
+                 "r"(val));
+}
+
 template<int cnt, typename F>
 __device__ __forceinline__ static void unrolled_loop(F &&lambda) {
     auto call = [&]<int... Is>(std::integer_sequence<int, Is...>) { (lambda.template operator()<Is>(), ...); };

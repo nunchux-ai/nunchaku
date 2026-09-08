@@ -230,7 +230,7 @@ void GEMM_W4A4_Launch<GEMMConfig_W4A4_FP16, false>::gemm_w4a4(
                                                                 NextEpilogue,
                                                                 typename GEMM::EpilogueNop>;
             return launch_bias.template operator()<Epilogue>({typename LoraUp::EpilogueLoraUp::Arguments{
-                                                                  .lora_act    = lora_act_in.data_ptr<float>(),
+                                                                  .lora_act    = lora_act_in.data_ptr<int>(),
                                                                   .lora_wgt_up = lora_up.data_ptr<packed_fpsum_t>(),
                                                                   .rank        = rank_up,
                                                                   .scales      = scales,
@@ -260,7 +260,7 @@ void GEMM_W4A4_Launch<GEMMConfig_W4A4_FP16, false>::gemm_w4a4(
                                                             NextEpilogue,
                                                             typename GEMM::EpilogueNop>;
         return launch_bias.template operator()<Epilogue>({typename LoraUp::EpilogueLoraUp::Arguments{
-                                                              .lora_act    = lora_act_in.data_ptr<float>(),
+                                                              .lora_act    = lora_act_in.data_ptr<int>(),
                                                               .lora_wgt_up = lora_up.data_ptr<packed_fpsum_t>(),
                                                               .rank        = rank_up,
                                                               .scales      = scales,
@@ -269,7 +269,7 @@ void GEMM_W4A4_Launch<GEMMConfig_W4A4_FP16, false>::gemm_w4a4(
                                                           midArgs,
                                                           typename LoraDown::EpilogueLoraDown::Arguments{
                                                               .lora_wgt_down = lora_down.data_ptr<packed_fpsum_t>(),
-                                                              .lora_act      = lora_act_out.data_ptr<float>(),
+                                                              .lora_act      = lora_act_out.data_ptr<int>(),
                                                               .rank          = rank_down,
                                                               .alwaysfalse   = false,
                                                           },
@@ -507,7 +507,7 @@ void GEMM_W4A4_Launch<Config, USE_FP4>::quantize_w4a4_act_fuse_lora(Tensor input
                 .output        = output.data_ptr<packed_act_t>(),
                 .oscales       = oscales.data_ptr<typename kernel::oscales_t>(),
                 .lora_wgt_down = lora_down.data_ptr<packed_fpsum_t>(),
-                .lora_act      = lora_act_out.data_ptr<float>(),
+                .lora_act      = lora_act_out.data_ptr<int>(),
                 .lora_rank     = rank,
                 .M             = M,
                 .N             = N,

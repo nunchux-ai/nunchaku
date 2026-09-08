@@ -1109,7 +1109,7 @@ public:
             packed_act_t *output;
             oscales_t *oscales;
             const packed_fpsum_t *lora_wgt_down;
-            float *lora_act;
+            int *lora_act;
 
             int lora_rank;
 

@@ -58,37 +58,42 @@ public:
         });
     }
 
-    // lora_act: [M / BLOCK_M, rank / WARP_R, NUM_WARPS, LORA_M_TILES, LORA_R_TILES, 8, WARP_SIZE] of float
+    // lora_act: [M / BLOCK_M, rank / WARP_R, NUM_WARPS, LORA_M_TILES, LORA_R_TILES, 8, WARP_SIZE] of int
     __device__ __forceinline__ static void
-    load_lora_act(const float *ptr, int rtile, lora_act_warp &result, bool pred) {
+    load_lora_act(const int *ptr, int rtile, lora_act_warp &result, bool pred) {
         const int laneId = threadIdx.x % WARP_SIZE;
         const int warpId = threadIdx.x / WARP_SIZE;
 
-        const float *ptrlane =
+        const int *ptrlane =
             &ptr[(rtile * NUM_WARPS + warpId) * LORA_M_TILES * LORA_R_TILES * 8 * WARP_SIZE + laneId];
 
         unrolled_loop<LORA_M_TILES>([&]<int m>() {
-            unrolled_loop<LORA_R_TILES>([&]<int r> {
+            unrolled_loop<LORA_R_TILES>([&]<int r>() {
                 constexpr int i = m * LORA_R_TILES + r;
                 unrolled_loop<8>([&]<int j>() {
                     constexpr int offset = i * 8 * WARP_SIZE + j * WARP_SIZE;
-                    result[i].data[j]    = load_pred(ptrlane + offset, pred); // * scales[rtile * LORA_R_TILES + r];
+                    int temp_val = load_pred(ptrlane + offset, pred);
+                    result[i].data[j] = (float)temp_val;
                 });
-                // CHECK_NAN(tmp, "load_lora_act.tmp");
             });
         });
     }
     // no vector reduction in sm_89 :(
-    __device__ __forceinline__ static void reduce_lora_act(float *ptr, int rtile, lora_act_warp val, bool pred) {
+    // use fixed-point int32 for deterministic reduction
+    __device__ __forceinline__ static void reduce_lora_act(int *ptr, int rtile, lora_act_warp val, bool pred) {
+        constexpr int FRAC_BITS = 16;
+        constexpr float SCALE_FACTOR = (float)(1 << FRAC_BITS);
+
         const int laneId = threadIdx.x % WARP_SIZE;
         const int warpId = threadIdx.x / WARP_SIZE;
 
-        float *ptrlane = &ptr[(rtile * NUM_WARPS + warpId) * LORA_M_TILES * LORA_R_TILES * 8 * WARP_SIZE + laneId];
+        int *ptrlane = &ptr[(rtile * NUM_WARPS + warpId) * LORA_M_TILES * LORA_R_TILES * 8 * WARP_SIZE + laneId];
 
         unrolled_loop<LORA_M_TILES * LORA_R_TILES>([&]<int i>() {
             unrolled_loop<8>([&]<int j>() {
                 constexpr int offset = i * 8 * WARP_SIZE + j * WARP_SIZE;
-                reduce_add_pred(&ptrlane[offset], val[i].data[j], pred);
+                int ival = __float2int_rn(val[i].data[j] * SCALE_FACTOR);
+                reduce_add_pred(&ptrlane[offset], ival, pred);
             });
         });
     }
@@ -109,7 +114,7 @@ public:
 
     struct EpilogueLoraUp {
         struct Arguments {
-            const float *lora_act;
+            const int *lora_act;
             const packed_fpsum_t *lora_wgt_up;
             int rank;
 
@@ -119,11 +124,27 @@ public:
         };
 
         __device__ __forceinline__ static void apply_lora_up(fpsum_warp &fpsum,
-                                                             const float *act,
+                                                             const int *act,
                                                              const packed_fpsum_t *wgt,
                                                              const scale_t &scales,
                                                              int rank,
                                                              bool alwaysfalse) {
+
+            constexpr int FRAC_BITS = 16;
+            constexpr float INV_SCALE_FACTOR = 1.0f / (1 << FRAC_BITS);
+
+            // fuse dequantization into scales
+            scale_t adjusted_scales;
+            const int num_r_tiles = rank / WARP_R;
+            #pragma unroll
+            for (int r_outer = 0; r_outer < num_r_tiles; r_outer++) {
+                #pragma unroll
+                for (int r_inner = 0; r_inner < LORA_R_TILES; r_inner++) {
+                    int idx = r_outer * LORA_R_TILES + r_inner;
+                    adjusted_scales[idx] = scales[idx] * INV_SCALE_FACTOR;
+                }
+            }
+
             constexpr int NUM_STAGES = 2;
 
             const int laneId = threadIdx.x % WARP_SIZE;
@@ -144,14 +165,14 @@ public:
 
             f32psum_warp f32psum = packed_fp16_to_fp32(fpsum); // 128
 
-            auto compute = [&scales](lora_act_warp A, lora_wgt_warp W, f32psum_warp &f32psum, int rtile) ALWAYSINLINE {
+            auto compute = [&adjusted_scales](lora_act_warp A, lora_wgt_warp W, f32psum_warp &f32psum, int rtile) ALWAYSINLINE {
                 lora_act16_warp A_fp16;
                 for (int m = 0; m < LORA_M_TILES; m++) {
                     for (int r = 0; r < LORA_R_TILES; r++) {
                         packed_f32psum_t pack = A[m * LORA_R_TILES + r];
 #pragma unroll
                         for (int j = 0; j < 8; j++) {
-                            pack.data[j] *= scales[rtile * LORA_R_TILES + r];
+                            pack.data[j] *= adjusted_scales[rtile * LORA_R_TILES + r];
                         }
                         A_fp16[m * LORA_R_TILES + r] = packed_fp32_to_fp16(pack);
                     }
@@ -243,7 +264,7 @@ public:
     struct EpilogueLoraDown {
         struct Arguments {
             const packed_fpsum_t *lora_wgt_down;
-            float *lora_act;
+            int *lora_act;
 
             int rank;
 
@@ -251,7 +272,7 @@ public:
         };
 
         __device__ __forceinline__ static void
-        apply_lora_down(fpsum_warp &fpsum, float *act, const packed_fpsum_t *wgt, int rank, bool alwaysfalse) {
+        apply_lora_down(fpsum_warp &fpsum, int *act, const packed_fpsum_t *wgt, int rank, bool alwaysfalse) {
             constexpr int NUM_STAGES = 2;
 
             const int laneId = threadIdx.x % WARP_SIZE;
