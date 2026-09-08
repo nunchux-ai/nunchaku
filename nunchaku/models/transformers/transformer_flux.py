@@ -531,6 +531,12 @@ class NunchakuFluxTransformer2dModel(FluxTransformer2DModel, NunchakuModelLoader
         self.comfy_lora_meta_list = []
         self.comfy_lora_sd_list = []
 
+        # Fast LoRA switching: preloaded variant pool
+        self._lora_variants: dict[str, dict[str, torch.Tensor]] = {}
+        self._lora_variant_unquantized: dict[str, dict[str, torch.Tensor]] = {}
+        self._lora_variant_vectors: dict[str, dict[str, torch.Tensor]] = {}
+        self._active_lora_variant: str | None = None
+
     @classmethod
     @utils.validate_hf_hub_args
     def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], **kwargs):
@@ -895,6 +901,191 @@ class NunchakuFluxTransformer2dModel(FluxTransformer2DModel, NunchakuModelLoader
             state_dict.update(updated_vectors)
         self.transformer_blocks[0].m.loadDict(state_dict, True)
         self.reset_x_embedder()
+
+    def preload_loras(self, loras: dict[str, str | dict[str, torch.Tensor] | None]) -> None:
+        """
+        Preload multiple LoRAs for fast switching.
+
+        This method pre-computes and caches the complete state dicts for each LoRA,
+        enabling near-instant switching via :meth:`switch_lora`.
+
+        Parameters
+        ----------
+        loras : dict
+            Mapping of variant names to LoRA sources. Values can be:
+
+            - ``str``: Path to a LoRA weights file (local or HuggingFace repo)
+            - ``dict``: Pre-loaded state dict
+            - ``None``: No LoRA (base model only)
+
+        Example
+        -------
+        >>> transformer.preload_loras({
+        ...     "none": None,
+        ...     "anime": "path/to/anime.safetensors",
+        ...     "realistic": "path/to/realistic.safetensors",
+        ... })
+        >>> transformer.switch_lora("anime")  # instant switch
+        """
+        device = next(self.parameters()).device
+
+        for name, lora_source in loras.items():
+            if lora_source is None:
+                # Base model without LoRA
+                quantized_state_dict = {k: v for k, v in self._quantized_part_sd.items() if "lora" in k}
+                self._lora_variants[name] = {
+                    k: v.to(device) if hasattr(v, "to") and v.device.type != "meta" else v
+                    for k, v in quantized_state_dict.items()
+                }
+                self._lora_variant_unquantized[name] = {}
+                self._lora_variant_vectors[name] = {}
+            else:
+                # Load and convert LoRA
+                if isinstance(lora_source, dict):
+                    state_dict = {k: v for k, v in lora_source.items()}
+                else:
+                    state_dict = load_state_dict_in_safetensors(lora_source)
+
+                if not is_nunchaku_format(state_dict):
+                    state_dict = to_nunchaku(state_dict, base_sd=self._quantized_part_sd)
+
+                # Separate unquantized parts
+                unquantized_loras = {}
+                for k, v in list(state_dict.items()):
+                    if "transformer_blocks" not in k:
+                        unquantized_loras[k] = state_dict.pop(k).to(device)
+
+                # Separate vector parts
+                vectors = {}
+                for k, v in list(state_dict.items()):
+                    if v.ndim == 1:
+                        vectors[k] = state_dict.pop(k)
+
+                # Fuse vectors if present
+                if vectors:
+                    fused_vectors = fuse_vectors(vectors, self._quantized_part_sd, 1)
+                    state_dict.update(fused_vectors)
+
+                # Move to device and cache
+                self._lora_variants[name] = {
+                    k: v.to(device) if hasattr(v, "to") and v.device.type != "meta" else v
+                    for k, v in state_dict.items()
+                }
+                self._lora_variant_unquantized[name] = unquantized_loras
+                self._lora_variant_vectors[name] = vectors
+
+        logger.info(f"Preloaded {len(loras)} LoRA variants: {list(loras.keys())}")
+
+    def switch_lora(self, name: str, strength: float = 1.0) -> None:
+        """
+        Instantly switch to a preloaded LoRA variant.
+
+        Parameters
+        ----------
+        name : str
+            Name of the preloaded LoRA variant.
+        strength : float, optional
+            LoRA strength (default: 1.0).
+
+        Raises
+        ------
+        KeyError
+            If the variant name was not preloaded.
+
+        Example
+        -------
+        >>> transformer.preload_loras({"anime": "path/to/anime.safetensors"})
+        >>> transformer.switch_lora("anime")
+        """
+        if name not in self._lora_variants:
+            available = list(self._lora_variants.keys())
+            raise KeyError(f"LoRA variant '{name}' not preloaded. Available: {available}")
+
+        # Update quantized parts (this is the fast path - just loadDict)
+        block = self.transformer_blocks[0]
+        assert isinstance(block, NunchakuFluxTransformerBlocks)
+        block.m.loadDict(self._lora_variants[name], True)
+
+        # Update unquantized parts
+        self._unquantized_part_loras = self._lora_variant_unquantized[name]
+        if self._unquantized_part_loras:
+            self._update_unquantized_part_lora_params(strength)
+        else:
+            # Reset to base if no unquantized loras
+            self._update_unquantized_part_lora_params(0)
+
+        # Update vectors
+        self._quantized_part_vectors = self._lora_variant_vectors[name]
+        if self._quantized_part_vectors and strength != 1.0:
+            vector_dict = fuse_vectors(self._quantized_part_vectors, self._quantized_part_sd, strength)
+            block.m.loadDict(vector_dict, True)
+
+        # Set strength
+        block.m.setLoraScale(SVD_RANK, strength)
+
+        self._active_lora_variant = name
+        logger.debug(f"Switched to LoRA variant: {name}")
+
+    def list_preloaded_loras(self) -> list[str]:
+        """
+        List all preloaded LoRA variant names.
+
+        Returns
+        -------
+        list[str]
+            Names of preloaded variants.
+        """
+        return list(self._lora_variants.keys())
+
+    def get_active_lora(self) -> str | None:
+        """
+        Get the name of the currently active LoRA variant.
+
+        Returns
+        -------
+        str or None
+            Name of active variant, or None if not using preloaded variants.
+        """
+        return self._active_lora_variant
+
+    def unload_lora_variant(self, name: str) -> None:
+        """
+        Unload a preloaded LoRA variant from GPU memory.
+
+        Parameters
+        ----------
+        name : str
+            Name of the variant to unload.
+
+        Raises
+        ------
+        KeyError
+            If the variant name was not preloaded.
+        ValueError
+            If trying to unload the currently active variant.
+        """
+        if name not in self._lora_variants:
+            raise KeyError(f"LoRA variant '{name}' not preloaded.")
+        if name == self._active_lora_variant:
+            raise ValueError(f"Cannot unload active variant '{name}'. Switch to another first.")
+
+        del self._lora_variants[name]
+        del self._lora_variant_unquantized[name]
+        del self._lora_variant_vectors[name]
+        logger.info(f"Unloaded LoRA variant: {name}")
+
+    def clear_preloaded_loras(self) -> None:
+        """
+        Clear all preloaded LoRA variants from GPU memory.
+
+        Note: This also resets the model to base state (no LoRA).
+        """
+        self._lora_variants.clear()
+        self._lora_variant_unquantized.clear()
+        self._lora_variant_vectors.clear()
+        self._active_lora_variant = None
+        self.reset_lora()
+        logger.info("Cleared all preloaded LoRA variants")
 
     def forward(
         self,
