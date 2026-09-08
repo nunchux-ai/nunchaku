@@ -149,13 +149,31 @@ class SVDQW4A4Linear(nn.Module):
         SVDQW4A4Linear
         """
         in_features = kwargs.pop("in_features", linear.in_features)
-        torch_dtype = kwargs.pop("torch_dtype", linear.weight.dtype)
+        # `dict.pop(key, default)` evaluates its default eagerly, so `linear.weight.dtype` was
+        # read even when the caller passed `torch_dtype` explicitly. That is fatal for any host
+        # whose Linear does not carry a weight yet: ComfyUI 0.33 ships a Windows-only lazy
+        # `Linear` that leaves `self.weight = None` until `_load_from_state_dict` runs, and this
+        # line raises `AttributeError: 'NoneType' object has no attribute 'dtype'` before the
+        # explicit argument is ever considered.
+        torch_dtype = kwargs.pop("torch_dtype", None)
+        device = kwargs.pop("device", None)
+        weight = getattr(linear, "weight", None)
+        if torch_dtype is None or device is None:
+            if weight is None:
+                raise ValueError(
+                    f"{type(linear).__name__} carries no weight tensor, so `torch_dtype` and "
+                    f"`device` cannot be inferred from it. Pass both explicitly -- some hosts "
+                    f"allocate module weights lazily and only materialise them when the state "
+                    f"dict is loaded."
+                )
+            torch_dtype = weight.dtype if torch_dtype is None else torch_dtype
+            device = weight.device if device is None else device
         return cls(
             in_features=in_features,
             out_features=linear.out_features,
             bias=linear.bias is not None,
             torch_dtype=torch_dtype,
-            device=linear.weight.device,
+            device=device,
             **kwargs,
         )
 
