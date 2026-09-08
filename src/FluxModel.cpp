@@ -1445,10 +1445,10 @@ std::tuple<Tensor, Tensor, Tensor> FluxModel::forward_ip_adapter(size_t layer,
         }
     }
 
-    std::tie(hidden_states, encoder_hidden_states) = transformer_blocks.at(layer)->forward(
-        hidden_states, encoder_hidden_states, temb, rotary_emb_img, rotary_emb_context, 0.0f);
-    Tensor ip_query = transformer_blocks.at(layer)->get_q_heads(
-        hidden_states, encoder_hidden_states, temb, rotary_emb_img, rotary_emb_context, 0.0f);
+    Tensor ip_query;
+    std::tie(hidden_states, encoder_hidden_states, ip_query) =
+        transformer_blocks.at(layer)->forward_ip_adapter_branch(
+            hidden_states, encoder_hidden_states, temb, rotary_emb_img, rotary_emb_context, 0.0f);
 
     if (controlnet_block_samples.valid()) {
         const int num_controlnet_block_samples = controlnet_block_samples.shape[0];

@@ -9,18 +9,29 @@
 
 namespace nunchaku::kernels {
 
-template<typename T>
-__global__ void add_kernel(T *a, T *b, T *c, size_t length) {
-    int i = threadIdx.x + blockIdx.x * blockDim.x;
-    if (i < length) {
-        c[i] = a[i] + b[i];
-    }
-}
-
 template<typename T, int unroll>
 struct alignas(sizeof(T) * unroll) Tvec {
     T data[unroll];
 };
+
+template<typename T, int unroll>
+__global__ void add_kernel(T *a, T *b, T *c, size_t length) {
+    int i = (threadIdx.x + blockIdx.x * blockDim.x) * unroll;
+    if (i >= length) return;
+
+    using Tvec = nunchaku::kernels::Tvec<T, unroll>;
+
+    Tvec ra = *reinterpret_cast<Tvec *>(&a[i]);
+    Tvec rb = *reinterpret_cast<Tvec *>(&b[i]);
+    Tvec rc;
+
+#pragma unroll
+    for (int k = 0; k < unroll; k++) {
+        rc.data[k] = ra.data[k] + rb.data[k];
+    }
+
+    *reinterpret_cast<Tvec *>(&c[i]) = rc;
+}
 
 template<typename T, int unroll, bool no_scale>
 __global__ void mul_add_kernel(T *x,

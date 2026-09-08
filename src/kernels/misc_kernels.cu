@@ -11,15 +11,26 @@ Tensor add(Tensor a, Tensor b) {
     assert(b.is_contiguous());
 
     int threadsPerBlock = 1024;
-    int blocksPerGrid   = (a.numel() + threadsPerBlock - 1) / threadsPerBlock;
 
     auto stream = getCurrentCUDAStream();
 
     Tensor out = Tensor::empty_like(a);
 
+    constexpr int unroll = 8;
+    const bool can_vectorize = (a.numel() % unroll == 0) &&
+                               ((uintptr_t)a.data_ptr() % (a.scalar_size() * unroll) == 0) &&
+                               ((uintptr_t)b.data_ptr() % (b.scalar_size() * unroll) == 0);
+
     dispatch(out.scalar_type(), [&]<typename scalar_t>() {
-        add_kernel<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(
-            a.data_ptr<scalar_t>(), b.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), out.numel());
+        if (can_vectorize) {
+            int blocksPerGrid = (a.numel() + threadsPerBlock * unroll - 1) / (threadsPerBlock * unroll);
+            add_kernel<scalar_t, unroll><<<blocksPerGrid, threadsPerBlock, 0, stream>>>(
+                a.data_ptr<scalar_t>(), b.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), out.numel());
+        } else {
+            int blocksPerGrid = (a.numel() + threadsPerBlock - 1) / threadsPerBlock;
+            add_kernel<scalar_t, 1><<<blocksPerGrid, threadsPerBlock, 0, stream>>>(
+                a.data_ptr<scalar_t>(), b.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), out.numel());
+        }
     });
 
     return out;
