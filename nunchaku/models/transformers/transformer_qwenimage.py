@@ -514,7 +514,10 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel, NunchakuM
             else self.time_text_embed(timestep, guidance, hidden_states)
         )
 
-        image_rotary_emb = self.pos_embed(img_shapes, txt_seq_lens, device=hidden_states.device)
+        text_seq_len = encoder_hidden_states.shape[1] if encoder_hidden_states is not None else None
+        if text_seq_len is None:
+            raise ValueError("encoder_hidden_states must be provided to compute text sequence length")
+        image_rotary_emb = self.pos_embed(img_shapes, max_txt_seq_len=text_seq_len, device=hidden_states.device)
 
         compute_stream = torch.cuda.current_stream()
         if self.offload:
