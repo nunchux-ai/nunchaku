@@ -133,6 +133,28 @@ def fused_qkv_norm_rottary(
     )
 
     batch_size, seq_len, channels = x.shape
+    if batch_size > 1:
+        # The kernel reads one rotary row per row of the flattened input, and the packed Q/K/V epilogue has no batch
+        # index, while ``rotary_emb`` covers one sequence. Project the batch one sequence at a time.
+        if isinstance(output, tuple):
+            for i in range(batch_size):
+                fused_qkv_norm_rottary(
+                    x[i : i + 1],
+                    proj,
+                    norm_q,
+                    norm_k,
+                    rotary_emb,
+                    output=tuple(o[i : i + 1] for o in output),
+                    attn_tokens=attn_tokens,
+                )
+            return output
+        if output is None:
+            output = torch.empty(batch_size * seq_len, proj.out_features, dtype=x.dtype, device=x.device)
+        output = output.view(batch_size, seq_len, -1)
+        for i in range(batch_size):
+            fused_qkv_norm_rottary(x[i : i + 1], proj, norm_q, norm_k, rotary_emb, output=output[i])
+        return output
+
     x = x.view(batch_size * seq_len, channels)
     quantized_x, ascales, lora_act = proj.quantize(x)
 
