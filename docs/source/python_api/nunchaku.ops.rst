@@ -8,3 +8,4 @@ nunchaku.ops
    nunchaku.ops.gemv
    nunchaku.ops.quantize
    nunchaku.ops.fused
+   nunchaku.ops.misc
