@@ -14,4 +14,7 @@ It requires a diffusers version that provides ``Flux3Transformer2DModel``.
          :linenos:
 
 
+To use `FP16 Attention <./attention>`_, call ``transformer.set_attention_impl("nunchaku-fp16")`` after loading the
+transformer.
+
 For more details, see :class:`~nunchaku.models.transformers.transformer_flux3.NunchakuFlux3Transformer2DModel`.

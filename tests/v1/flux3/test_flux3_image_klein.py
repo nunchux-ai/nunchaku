@@ -66,8 +66,11 @@ def run_flux3_pipeline(pipe, save_dir: Path):
     not hasattr(diffusers, "Flux3Transformer2DModel"), reason="diffusers has no Flux3Transformer2DModel"
 )
 @pytest.mark.skipif(is_turing(), reason="Turing GPUs. Skip tests.")
-@pytest.mark.parametrize("rank,expected_lpips", [(32, {"int4-bf16": 0.25})])
-def test_flux3_image_klein(rank: int, expected_lpips: dict[str, float]):
+@pytest.mark.parametrize(
+    "rank,attention_impl,expected_lpips",
+    [(32, "flashattn2", {"int4-bf16": 0.25}), (32, "nunchaku-fp16", {"int4-bf16": 0.25})],
+)
+def test_flux3_image_klein(rank: int, attention_impl: str, expected_lpips: dict[str, float]):
     if f"{precision}-{dtype_str}" not in expected_lpips:
         return
 
@@ -81,10 +84,15 @@ def test_flux3_image_klein(rank: int, expected_lpips: dict[str, float]):
     from nunchaku.models.transformers.transformer_flux3 import NunchakuFlux3Transformer2DModel
 
     save_dir_nunchaku = (
-        Path("test_results") / "nunchaku" / model_name / f"{precision}_r{rank}-{dtype_str}" / folder_name
+        Path("test_results")
+        / "nunchaku"
+        / model_name
+        / f"{precision}_r{rank}-{dtype_str}"
+        / f"{folder_name}-{attention_impl}"
     )
     path = f"{nunchaku_repo_id}/svdq-{precision}_r{rank}-flux3-image-klein.safetensors"
     transformer = NunchakuFlux3Transformer2DModel.from_pretrained(path, torch_dtype=torch_dtype)
+    transformer.set_attention_impl(attention_impl)
     pipe = load_pipeline(transformer)
     run_flux3_pipeline(pipe, save_dir_nunchaku)
     del transformer
