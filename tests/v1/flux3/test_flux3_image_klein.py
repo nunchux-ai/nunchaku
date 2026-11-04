@@ -23,7 +23,7 @@ folder_name = f"w{width}h{height}"
 save_dir_16bit = Path(ref_root) / model_name / dtype_str / folder_name
 
 repo_id = "black-forest-labs/flux-3-image-klein"
-nunchaku_repo_id = "NotaMG/flux-3-image-klein-svdq-int4-r32-nunchaku"
+nunchaku_repo_id = "Bluebear7878/nunchaku-flux-3-image-klein"
 
 # FLUX.3 Image Klein expects full scene captions; its model card recommends running the prompt upsampler first.
 dataset = [
@@ -90,7 +90,7 @@ def test_flux3_image_klein(rank: int, attention_impl: str, expected_lpips: dict[
         / f"{precision}_r{rank}-{dtype_str}"
         / f"{folder_name}-{attention_impl}"
     )
-    path = f"{nunchaku_repo_id}/svdq-{precision}_r{rank}-flux3-image-klein.safetensors"
+    path = f"{nunchaku_repo_id}/svdq-{precision}_r{rank}-flux-3-image-klein.safetensors"
     transformer = NunchakuFlux3Transformer2DModel.from_pretrained(path, torch_dtype=torch_dtype)
     transformer.set_attention_impl(attention_impl)
     pipe = load_pipeline(transformer)
@@ -122,7 +122,7 @@ def test_flux3_image_klein_batch(attention_impl: str):
     from nunchaku.models.transformers.transformer_flux3 import NunchakuFlux3Transformer2DModel
 
     transformer = NunchakuFlux3Transformer2DModel.from_pretrained(
-        f"{nunchaku_repo_id}/svdq-int4_r32-flux3-image-klein.safetensors", torch_dtype=torch_dtype, device="cuda"
+        f"{nunchaku_repo_id}/svdq-int4_r32-flux-3-image-klein.safetensors", torch_dtype=torch_dtype, device="cuda"
     )
     transformer.set_attention_impl(attention_impl)
 

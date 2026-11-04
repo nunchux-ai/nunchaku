@@ -6,7 +6,7 @@ from nunchaku.models.transformers.transformer_flux3 import NunchakuFlux3Transfor
 if __name__ == "__main__":
     # Only an INT4 checkpoint is available, so this needs a GPU that runs INT4 models (e.g., RTX 30/40 series).
     transformer = NunchakuFlux3Transformer2DModel.from_pretrained(
-        "NotaMG/flux-3-image-klein-svdq-int4-r32-nunchaku/svdq-int4_r32-flux3-image-klein.safetensors"
+        "Bluebear7878/nunchaku-flux-3-image-klein/svdq-int4_r32-flux-3-image-klein.safetensors"
     )
 
     blocks = ModularPipeline.from_pretrained("black-forest-labs/flux-3-image-klein").blocks
