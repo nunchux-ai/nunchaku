@@ -111,6 +111,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def("attention_fp16", nunchaku::ops::attention_fp16)
         .def("gemm_awq", nunchaku::ops::gemm_awq)
         .def("gemv_awq", nunchaku::ops::gemv_awq)
+        .def("silu_and_mul", nunchaku::ops::silu_and_mul)
+        .def("mul_add_batch", nunchaku::ops::mul_add_batch)
+        .def("layernorm_general", nunchaku::ops::layernorm_general)
 
         .def("test_rmsnorm_rope", nunchaku::ops::test_rmsnorm_rope)
         .def("test_pack_qkv", nunchaku::ops::test_pack_qkv);
