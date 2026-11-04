@@ -43,8 +43,10 @@ dataset = [
 
 
 def load_pipeline(transformer=None):
-    pipe = diffusers.ModularPipeline.from_pretrained(repo_id)
-    # The pipeline index also lists an 18.8 GB prompt upsampler, which full captions do not need.
+    blocks = diffusers.ModularPipeline.from_pretrained(repo_id).blocks
+    # The default blocks rewrite the prompt with an 18.8 GB prompt upsampler, which full captions do not need.
+    blocks.sub_blocks.pop("prompt_upsampler", None)
+    pipe = blocks.init_pipeline(repo_id)
     names = ["text_encoder", "tokenizer", "vae"] + (["transformer"] if transformer is None else [])
     pipe.load_components(names=names, dtype=torch_dtype)
     if transformer is not None:

@@ -9,8 +9,11 @@ if __name__ == "__main__":
         "NotaMG/flux-3-image-klein-svdq-int4-r32-nunchaku/svdq-int4_r32-flux3-image-klein.safetensors"
     )
 
-    pipe = ModularPipeline.from_pretrained("black-forest-labs/flux-3-image-klein")
-    # Load the text encoder and the VAE only; the pipeline index also lists an 18.8 GB prompt upsampler.
+    blocks = ModularPipeline.from_pretrained("black-forest-labs/flux-3-image-klein").blocks
+    # The default blocks rewrite the prompt with an 18.8 GB prompt upsampler; drop that step to encode the prompt as given.
+    blocks.sub_blocks.pop("prompt_upsampler", None)
+    pipe = blocks.init_pipeline("black-forest-labs/flux-3-image-klein")
+    # Load the text encoder and the VAE only.
     pipe.load_components(names=["text_encoder", "tokenizer", "vae"], dtype=torch.bfloat16)
     pipe.update_components(transformer=transformer)
     pipe.to("cuda")
