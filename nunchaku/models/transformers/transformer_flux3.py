@@ -22,7 +22,7 @@ from huggingface_hub import utils
 from torch import nn
 
 from ...ops.misc import layer_norm, mul_add_, silu_and_mul
-from ...utils import get_precision
+from ...utils import check_hardware_compatibility, get_precision_from_quantization_config
 from ..attention import NunchakuBaseAttention
 from ..attention_processors.flux3 import NunchakuFlux3FA2Processor, NunchakuFlux3FP16AttnProcessor
 from ..linear import SVDQW4A4Linear
@@ -105,7 +105,7 @@ class NunchakuFlux3Attention(NunchakuBaseAttention):
         processor : str
             Name of the processor ("flashattn2" or "nunchaku-fp16").
 
-            - ``"flashattn2"``: Attention through diffusers' attention dispatcher (FlashAttention-2 by default). See :class:`~nunchaku.models.attention_processors.flux3.NunchakuFlux3FA2Processor`.
+            - ``"flashattn2"``: Attention through diffusers' ``dispatch_attention_fn`` with its default backend (PyTorch scaled dot-product attention, which runs FlashAttention-2 kernels for 16-bit inputs). See :class:`~nunchaku.models.attention_processors.flux3.NunchakuFlux3FA2Processor`.
             - ``"nunchaku-fp16"``: Uses FP16 attention accumulation, faster than FlashAttention-2 on NVIDIA 30-, 40-, and 50-series GPUs. See :class:`~nunchaku.models.attention_processors.flux3.NunchakuFlux3FP16AttnProcessor`.
 
         Raises
@@ -353,6 +353,8 @@ class NunchakuFlux3Transformer2DModel(Flux3Transformer2DModel, NunchakuModelLoad
             If offload is requested.
         AssertionError
             If the file is not a safetensors file.
+        ValueError
+            If the checkpoint's quantization does not match the GPU (e.g., INT4 on an RTX 50-series GPU).
         """
         device = kwargs.get("device", "cpu")
         offload = kwargs.get("offload", False)
@@ -367,12 +369,10 @@ class NunchakuFlux3Transformer2DModel(Flux3Transformer2DModel, NunchakuModelLoad
             (".safetensors", ".sft")
         ), "Only safetensors are supported"
         transformer, model_state_dict, metadata = cls._build_model(pretrained_model_name_or_path, **kwargs)
-        quantization_config = json.loads(metadata.get("quantization_config", "{}"))
+        quantization_config = json.loads(metadata["quantization_config"])
+        check_hardware_compatibility(quantization_config, device)
+        precision = get_precision_from_quantization_config(quantization_config)
         rank = quantization_config.get("rank", 32)
-
-        precision = get_precision()
-        if precision == "fp4":
-            precision = "nvfp4"
         transformer._patch_model(precision=precision, rank=rank)
         transformer = transformer.to_empty(device=device)
 
