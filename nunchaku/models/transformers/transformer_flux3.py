@@ -21,7 +21,7 @@ from diffusers.models.transformers.transformer_flux3 import (
 from huggingface_hub import utils
 from torch import nn
 
-from ...ops.misc import layer_norm, mul_add_, silu_and_mul
+from ...ops.misc import layer_norm, layer_norm_, mul_add_, silu_and_mul
 from ...utils import check_hardware_compatibility, get_precision_from_quantization_config
 from ..attention import NunchakuBaseAttention
 from ..attention_processors.flux3 import NunchakuFlux3FA2Processor, NunchakuFlux3FP16AttnProcessor
@@ -160,7 +160,8 @@ class NunchakuFlux3ModeTransformerBlock(Flux3ModeTransformerBlock):
     Nunchaku-optimized Flux3ModeTransformerBlock with quantized attention and feed-forward layers.
 
     The layer normalization, the modulation and the gated residual run in Nunchaku's CUDA kernels
-    (:mod:`nunchaku.ops.misc`).
+    (:mod:`nunchaku.ops.misc`). Unlike the diffusers block, ``temb_mod`` is one ``(B, 1, 3 * D)`` vector per sample, as
+    computed by :meth:`NunchakuFlux3Transformer2DModel.forward`.
 
     Parameters
     ----------
@@ -211,7 +212,8 @@ class NunchakuFlux3SingleTransformerBlock(Flux3SingleTransformerBlock):
     Nunchaku-optimized Flux3SingleTransformerBlock with quantized attention and feed-forward layers.
 
     The layer normalization, the modulation and the gated residual run in Nunchaku's CUDA kernels
-    (:mod:`nunchaku.ops.misc`).
+    (:mod:`nunchaku.ops.misc`). Unlike the diffusers block, ``temb_mod`` is a list of ``(num_tokens, (B, 1, 3 * D))``
+    content segments, as computed by :meth:`NunchakuFlux3Transformer2DModel.forward`.
 
     Parameters
     ----------
@@ -257,7 +259,7 @@ class NunchakuFlux3SingleTransformerBlock(Flux3SingleTransformerBlock):
             ``(encoder_hidden_states, hidden_states)``.
         """
         num_txt_tokens = encoder_hidden_states.shape[1]
-        combined = layer_norm(torch.cat([encoder_hidden_states, hidden_states], dim=1), self.norm.eps)
+        combined = layer_norm_(torch.cat([encoder_hidden_states, hidden_states], dim=1), self.norm.eps)
         _modulate_(combined[:, :num_txt_tokens], temb_mod_context)
         start = num_txt_tokens
         for num_tokens, mod in temb_mod:
@@ -433,12 +435,14 @@ class NunchakuFlux3Transformer2DModel(Flux3Transformer2DModel, NunchakuModelLoad
         Raises
         ------
         NotImplementedError
-            If ``attention_kwargs`` is given.
+            If ``attention_kwargs`` is given, or gradient checkpointing is enabled while gradients are on.
         ValueError
             If the reference image or the target timestep arguments are inconsistent.
         """
         if attention_kwargs:
             raise NotImplementedError("attention_kwargs is not supported for NunchakuFlux3Transformer2DModel")
+        if torch.is_grad_enabled() and self.gradient_checkpointing:
+            raise NotImplementedError("Gradient checkpointing is not supported for NunchakuFlux3Transformer2DModel")
         if image_cond_hidden_states is not None and image_cond_ids is None:
             raise ValueError("`image_cond_hidden_states` requires `image_cond_ids`.")
         if image_cond_hidden_states is None and image_cond_ids is not None:
