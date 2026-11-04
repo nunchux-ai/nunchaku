@@ -15,30 +15,36 @@ from ...utils import pad_tensor
 from ..embeddings import pack_rotemb
 
 
-def pack_flux3_rotary_emb(image_rotary_emb: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+def pack_flux3_rotary_emb(image_rotary_emb: Tuple[torch.Tensor, torch.Tensor], batch_size: int = 1) -> torch.Tensor:
     """
     Pack FLUX.3 rotary embeddings for :func:`~nunchaku.ops.fused.fused_qkv_norm_rottary`.
 
-    The packed tensor is cached on the cosine tensor, so the blocks that share one rotary embedding pack it once. The
-    cache is released together with the tensor.
+    The fused kernel reads one rotary row per row of the flattened ``(B * S, C)`` input, so the embedding is repeated
+    ``batch_size`` times before padding. The packed tensor is cached on the cosine tensor, so the blocks that share one
+    rotary embedding pack it once. The cache is released together with the tensor.
 
     Parameters
     ----------
     image_rotary_emb : tuple of torch.Tensor
         ``(cos, sin)``, each of shape (S, D), dtype float32, as returned by diffusers' ``Flux3PosEmbed``.
+    batch_size : int, optional
+        Number of sequences in the flattened input. Default is 1.
 
     Returns
     -------
-    torch.Tensor, shape (1, S_pad, D), dtype float32
-        Packed rotary embedding, with S padded to a multiple of 256.
+    torch.Tensor, shape (1, M_pad, D), dtype float32
+        Packed rotary embedding, with ``M = batch_size * S`` padded to a multiple of 256.
     """
     cos, sin = image_rotary_emb
-    packed = getattr(cos, "_nunchaku_packed_rotemb", None)
+    cache = getattr(cos, "_nunchaku_packed_rotemb", None)
+    if cache is None:
+        cache = cos._nunchaku_packed_rotemb = {}
+    packed = cache.get(batch_size)
     if packed is None:
         # FLUX.3 uses repeat_interleave_real=True, so both entries of a rotary pair share one cos/sin value.
         rotemb = torch.stack([sin[:, 0::2], cos[:, 0::2]], dim=-1).unsqueeze(0).unsqueeze(-2)
-        packed = pack_rotemb(pad_tensor(rotemb.float(), 256, 1))
-        cos._nunchaku_packed_rotemb = packed
+        rotemb = rotemb.repeat(1, batch_size, 1, 1, 1)
+        packed = cache[batch_size] = pack_rotemb(pad_tensor(rotemb.float(), 256, 1))
     return packed
 
 
@@ -79,7 +85,11 @@ class NunchakuFlux3FA2Processor(Flux3AttnProcessor):
             Output hidden states.
         """
         qkv = fused_qkv_norm_rottary(
-            hidden_states, attn.to_qkv, attn.norm_q, attn.norm_k, pack_flux3_rotary_emb(image_rotary_emb)
+            hidden_states,
+            attn.to_qkv,
+            attn.norm_q,
+            attn.norm_k,
+            pack_flux3_rotary_emb(image_rotary_emb, hidden_states.shape[0]),
         )
         query, key, value = qkv.chunk(3, dim=-1)
         query = query.unflatten(-1, (attn.heads, -1))
@@ -166,15 +176,18 @@ class NunchakuFlux3FP16AttnProcessor:
         )
         key = torch.empty_like(query)
         value = torch.empty_like(query)
-        fused_qkv_norm_rottary(
-            hidden_states,
-            attn.to_qkv,
-            attn.norm_q,
-            attn.norm_k,
-            pack_flux3_rotary_emb(image_rotary_emb),
-            output=(query, key, value),
-            attn_tokens=num_tokens,
-        )
+        # The packed Q/K/V epilogue writes one sequence per call, so the batch is projected sample by sample.
+        rotary_emb = pack_flux3_rotary_emb(image_rotary_emb)
+        for i in range(batch_size):
+            fused_qkv_norm_rottary(
+                hidden_states[i : i + 1],
+                attn.to_qkv,
+                attn.norm_q,
+                attn.norm_k,
+                rotary_emb,
+                output=(query[i : i + 1], key[i : i + 1], value[i : i + 1]),
+                attn_tokens=num_tokens,
+            )
         attention_output = torch.empty(
             batch_size, num_tokens_pad, channels, dtype=hidden_states.dtype, device=hidden_states.device
         )
