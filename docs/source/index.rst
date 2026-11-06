@@ -29,6 +29,7 @@ Check out `DeepCompressor <github_deepcompressor_>`_ for the quantization librar
     usage/pulid.rst
     usage/ip_adapter.rst
     usage/zimage.rst
+    usage/flux3.rst
 
 .. toctree::
     :maxdepth: 1
