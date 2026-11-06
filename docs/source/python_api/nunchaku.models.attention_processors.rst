@@ -5,5 +5,6 @@ nunchaku.models.attention_processors
    :maxdepth: 4
 
    nunchaku.models.attention_processors.flux
+   nunchaku.models.attention_processors.flux3
    nunchaku.models.attention_processors.qwenimage
    nunchaku.models.attention_processors.zimage

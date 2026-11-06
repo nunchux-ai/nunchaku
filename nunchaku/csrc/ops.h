@@ -4,6 +4,9 @@
 #include "kernels/zgemm/zgemm.h"
 #include "kernels/awq/gemv_awq.h"
 #include "kernels/awq/gemm_awq.h"
+#include "kernels/activation_kernels.h"
+#include "kernels/layernorm_kernels.h"
+#include "kernels/misc_kernels.h"
 
 namespace nunchaku::ops {
 
@@ -118,6 +121,43 @@ void attention_fp16(torch::Tensor q, // packed [Batch, Head, TokensQ, HEAD_DIM]
                     float scale) {
     TorchOpContext ctx;
     nunchaku::kernels::attention_fp16(from_torch(q), from_torch(k), from_torch(v), from_torch(o), scale);
+}
+
+void silu_and_mul(torch::Tensor out,   // [..., d]
+                  torch::Tensor input) // [..., 2 * d]
+{
+    TorchOpContext ctx;
+    Tensor out_   = from_torch(out);
+    Tensor input_ = from_torch(input);
+    ::silu_and_mul(out_, input_);
+}
+
+void mul_add_batch(torch::Tensor x, // [B, ...], updated in place: x = x * (scale + scale_shift) + bias
+                   std::optional<torch::Tensor> scale, // [B, D] if batch_scale else [D]
+                   bool batch_scale,
+                   double scale_shift,
+                   torch::Tensor bias, // [B, D] if batch_bias else [D]
+                   bool batch_bias) {
+    TorchOpContext ctx;
+    nunchaku::kernels::mul_add_batch(from_torch(x),
+                                     scale.has_value() ? from_torch(scale.value()) : Tensor{},
+                                     batch_scale,
+                                     scale_shift,
+                                     from_torch(bias),
+                                     batch_bias);
+}
+
+void layernorm_general(torch::Tensor out,                   // [..., hidden_size]
+                       torch::Tensor input,                 // [..., hidden_size]
+                       std::optional<torch::Tensor> weight, // [hidden_size]
+                       std::optional<torch::Tensor> bias,   // [hidden_size]
+                       double epsilon) {
+    TorchOpContext ctx;
+    ::layernorm_general(from_torch(out),
+                        from_torch(input),
+                        weight.has_value() ? from_torch(weight.value()) : Tensor{},
+                        bias.has_value() ? from_torch(bias.value()) : Tensor{},
+                        (float)epsilon);
 }
 
 torch::Tensor gemv_awq(torch::Tensor _in_feats,

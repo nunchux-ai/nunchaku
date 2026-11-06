@@ -6,6 +6,7 @@ nunchaku.models.transformers
 
    nunchaku.models.transformers.transformer_flux
    nunchaku.models.transformers.transformer_flux_v2
+   nunchaku.models.transformers.transformer_flux3
    nunchaku.models.transformers.transformer_qwenimage
    nunchaku.models.transformers.transformer_zimage
    nunchaku.models.transformers.transformer_sana

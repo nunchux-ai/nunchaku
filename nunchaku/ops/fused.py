@@ -8,7 +8,7 @@ from torch.nn import RMSNorm
 
 from nunchaku.models.linear import SVDQW4A4Linear
 
-from ..utils import ceil_divide
+from ..utils import ceil_divide, pad_tensor
 from .gemm import svdq_gemm_w4a4_cuda
 
 
@@ -133,6 +133,33 @@ def fused_qkv_norm_rottary(
     )
 
     batch_size, seq_len, channels = x.shape
+    if batch_size > 1 and (isinstance(output, tuple) or (rotary_emb is not None and seq_len % 16 != 0)):
+        # ``rotary_emb`` covers one sequence, and the packed Q/K/V epilogue has no batch index. Project the batch one
+        # sequence at a time.
+        if isinstance(output, tuple):
+            for i in range(batch_size):
+                fused_qkv_norm_rottary(
+                    x[i : i + 1],
+                    proj,
+                    norm_q,
+                    norm_k,
+                    rotary_emb,
+                    output=tuple(o[i : i + 1] for o in output),
+                    attn_tokens=attn_tokens,
+                )
+            return output
+        if output is None:
+            output = torch.empty(batch_size * seq_len, proj.out_features, dtype=x.dtype, device=x.device)
+        output = output.view(batch_size, seq_len, -1)
+        for i in range(batch_size):
+            fused_qkv_norm_rottary(x[i : i + 1], proj, norm_q, norm_k, rotary_emb, output=output[i])
+        return output
+    if batch_size > 1 and rotary_emb is not None:
+        # The kernel reads one rotary row per row of the flattened (B * S) input, while ``rotary_emb`` covers one
+        # sequence. Packed rotary rows form independent 16-row tiles, so with S a multiple of 16 the rows of one
+        # sequence are repeated for every sequence, and the whole batch runs in one kernel call.
+        rotary_emb = pad_tensor(rotary_emb[:, :seq_len].repeat(1, batch_size, 1), 256, 1)
+
     x = x.view(batch_size * seq_len, channels)
     quantized_x, ascales, lora_act = proj.quantize(x)
 
