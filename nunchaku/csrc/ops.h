@@ -127,12 +127,12 @@ void silu_and_mul(torch::Tensor out,   // [..., d]
                   torch::Tensor input) // [..., 2 * d]
 {
     TorchOpContext ctx;
-    Tensor out_     = from_torch(out);
-    Tensor input_   = from_torch(input);
+    Tensor out_   = from_torch(out);
+    Tensor input_ = from_torch(input);
     ::silu_and_mul(out_, input_);
 }
 
-void mul_add_batch(torch::Tensor x,                    // [B, ...], updated in place: x = x * (scale + scale_shift) + bias
+void mul_add_batch(torch::Tensor x, // [B, ...], updated in place: x = x * (scale + scale_shift) + bias
                    std::optional<torch::Tensor> scale, // [B, D] if batch_scale else [D]
                    bool batch_scale,
                    double scale_shift,
